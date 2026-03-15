@@ -1,0 +1,6 @@
+C:\mine\HCI\HCI Project\TUIO11_NET-master\bin\Debug\libTUIO.dll
+C:\mine\HCI\HCI Project\TUIO11_NET-master\bin\Debug\libTUIO.pdb
+C:\mine\HCI\HCI Project\TUIO11_NET-master\obj\Debug\TUIO_LIB.csproj.AssemblyReference.cache
+C:\mine\HCI\HCI Project\TUIO11_NET-master\obj\Debug\TUIO_LIB.csproj.CoreCompileInputs.cache
+C:\mine\HCI\HCI Project\TUIO11_NET-master\obj\Debug\libTUIO.dll
+C:\mine\HCI\HCI Project\TUIO11_NET-master\obj\Debug\libTUIO.pdb
