@@ -1,21 +1,3 @@
-/*
-	TUIO C# Demo - part of the reacTIVision project
-	Copyright (c) 2005-2016 Martin Kaltenbrunner <martin@tuio.org>
-
-	This program is free software; you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation; either version 2 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-*/
 
 using System;
 using System.Drawing;
@@ -49,8 +31,12 @@ public class TuioDemo : Form, TuioListener
 
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
+    public DateTime hoodieSwitch = DateTime.MinValue;
     public int cooldownSeconds = 1;
     public int pageCooldown = 1;
+    public int hoodieCooldown = 1;
+
+    private string hoodieColor = "Black";
 
     Font font = new Font("Arial", 10.0f);
     SolidBrush fntBrush = new SolidBrush(Color.White);
@@ -76,8 +62,8 @@ public class TuioDemo : Form, TuioListener
         this.KeyDown += new KeyEventHandler(Form_KeyDown);
 
         this.SetStyle(ControlStyles.AllPaintingInWmPaint |
-                        ControlStyles.UserPaint |
-                        ControlStyles.DoubleBuffer, true);
+                ControlStyles.UserPaint |
+                ControlStyles.DoubleBuffer, true);
 
         objectList = new Dictionary<long, TuioObject>(128);
         cursorList = new Dictionary<long, TuioCursor>(128);
@@ -224,8 +210,8 @@ public class TuioDemo : Form, TuioListener
 
     protected override void OnPaintBackground(PaintEventArgs pevent)
     {
-        // Getting the graphics object
-        Graphics g = pevent.Graphics;
+     // Getting the graphics object
+     Graphics g = pevent.Graphics;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, width, height));
 
 
@@ -241,9 +227,7 @@ public class TuioDemo : Form, TuioListener
                 Console.WriteLine("Error resizing image: " + ex.Message);
             }
         }
-
-        /// Takes the current page from other functions and displays it
-        void Display_Current_Page(Bitmap currentPage)
+ void Display_Current_Page(Bitmap currentPage)
         {
             try
             {
@@ -268,11 +252,10 @@ public class TuioDemo : Form, TuioListener
         {
             DrawHomeScreen();
         }
-        ///
 
 
-        /// Draws The Login Screen
-        void DrawLoginScreen()
+    /// Draws The Login Screen
+     void DrawLoginScreen()
         {
             Bitmap img = new Bitmap(themePath + @"\\Login.png");
             ResizeImage(ref img);
@@ -282,12 +265,12 @@ public class TuioDemo : Form, TuioListener
         {
             DrawLoginScreen();
         }
-        ///
+     ///
 
-        /// Draws The Clothes Screen
-        void DrawClothesScreen()
+     /// Draws The Clothes Screen
+     void DrawClothesScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\ClothesBlack.png");
+            Bitmap img = new Bitmap(themePath + @"\\Clothes" + hoodieColor + ".png");
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -295,13 +278,13 @@ public class TuioDemo : Form, TuioListener
         {
             DrawClothesScreen();
         }
-        ///
+  ///
 
 
-        /// Draws The Checkout Screen
-        void DrawCheckoutScreen()
+  /// Draws The Checkout Screen
+     void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\Checkout.png");
+            Bitmap img = new Bitmap(themePath + @"\\Checkout" + hoodieColor + ".png");
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -309,9 +292,9 @@ public class TuioDemo : Form, TuioListener
         {
             DrawCheckoutScreen();
         }
-        ///
+  ///
 
-        // draw the cursor path
+     // draw the cursor path
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -333,11 +316,13 @@ public class TuioDemo : Form, TuioListener
             }
         }
 
-        // draw the objects
-        if (objectList.Count > 0)
+         // draw the objects
+         if (objectList.Count > 0)
         {
             lock (objectList)
             {
+                string[] hoodieOrder = { "Black", "Grey", "Burgundy", "Pink" };
+
                 foreach (TuioObject tobj in objectList.Values)
                 {
                     int ox = tobj.getScreenX(width);
@@ -359,6 +344,28 @@ public class TuioDemo : Form, TuioListener
                             {
                                 themePath = @"Dark";
                             }
+                        }
+                    }
+
+                    if (tobj.SymbolID == 1)
+                    {
+                        if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
+                        {
+                            hoodieSwitch = DateTime.Now;
+
+                            int currentIndex = Array.IndexOf(hoodieOrder, hoodieColor);
+                            if (currentIndex < 0) currentIndex = 0;
+
+                            if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                            {
+                                currentIndex = (currentIndex + 1) % hoodieOrder.Length;
+                            }
+                            else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                            {
+                                currentIndex = (currentIndex - 1 + hoodieOrder.Length) % hoodieOrder.Length;
+                            }
+
+                            hoodieColor = hoodieOrder[currentIndex];
                         }
                     }
 
@@ -415,8 +422,10 @@ public class TuioDemo : Form, TuioListener
                                 }
                             }
                         }
+                    }
 
-
+                    if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
+                    {
                         g.TranslateTransform(ox, oy);
                         g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
                         g.TranslateTransform(-ox, -oy);
@@ -435,8 +444,8 @@ public class TuioDemo : Form, TuioListener
 
 
 
-            // draw the blobs
-            if (blobList.Count > 0)
+        // draw the blobs
+             if (blobList.Count > 0)
             {
                 lock (blobList)
                 {
@@ -486,3 +495,4 @@ public class TuioDemo : Form, TuioListener
         Application.Run(app);
     }
 }
+
