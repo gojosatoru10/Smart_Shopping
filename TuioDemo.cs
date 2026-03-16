@@ -26,7 +26,7 @@ public class TuioDemo : Form, TuioListener
 
     private bool fullscreen;
     private bool verbose;
-    public bool home = true, login = false, clothes = false, checkout = false, dark = false;
+    public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou=false;
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
@@ -39,9 +39,17 @@ public class TuioDemo : Form, TuioListener
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
     public DateTime hoodieSwitch = DateTime.MinValue;
+
+    public DateTime hoodieCount = DateTime.MinValue;
+
     public int cooldownSeconds = 1;
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
+
+    public int cthoodieBlack = 0;
+    public int cthoodieGrey = 0;
+    public int cthoodieBurgundy = 0;
+    public int cthoodiePink = 0;
 
     /// Hoodie color state variable to keep track of the current color and switch between them when the corresponding object is rotated.
     private string hoodieColor = "Black";
@@ -302,6 +310,25 @@ public class TuioDemo : Form, TuioListener
             Bitmap img = new Bitmap(Path.Combine(themePath, $"Select{hoodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
+
+            // Draw the count of each hoodie centered between the + and - buttons
+            using (Font countFont = new Font("Arial", 28f, FontStyle.Bold))
+            using (SolidBrush countBrush = new SolidBrush(Color.White))
+            {
+                // Use proportional coordinates so it works at any resolution
+                float cw = ClientSize.Width;
+                float ch = ClientSize.Height;
+                float countY = ch * 0.820f;
+                g.DrawString(cthoodieBlack.ToString(), countFont, countBrush, cw * 0.157f, countY);
+                g.DrawString(cthoodieGrey.ToString(), countFont, countBrush, cw * 0.386f, countY);
+                g.DrawString(cthoodieBurgundy.ToString(), countFont, countBrush, cw * 0.617f, countY);
+                g.DrawString(cthoodiePink.ToString(), countFont, countBrush, cw * 0.846f, countY);
+            }
+
+
+
+
+
         }
         if (clothes == true)
         {
@@ -313,13 +340,24 @@ public class TuioDemo : Form, TuioListener
         /// Draws The Checkout Screen
         void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(Path.Combine(themePath, $"Checkout{checkoutHodieColor}.png"));
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"Checkout{hoodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
         if (checkout == true)
         {
             DrawCheckoutScreen();
+        }
+
+        void DrawThankyouScreen()
+        {
+            Bitmap img = new Bitmap(Path.Combine(themePath, "ThankYou.png"));
+            ResizeImage(ref img);
+            Display_Current_Page(img);
+        }
+        if (thankyou == true)
+        {
+            DrawThankyouScreen();
         }
         ///
 
@@ -380,7 +418,7 @@ public class TuioDemo : Form, TuioListener
                     ///
 
                     /// Handle Hoodie Color Switching
-                    if (tobj.SymbolID == 2)
+                    if (tobj.SymbolID == 2&&clothes)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
                         {
@@ -402,6 +440,118 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
                     ///
+                    if (tobj.SymbolID == 3 && clothes)
+                    {
+                        if ((DateTime.Now - hoodieCount).TotalSeconds > hoodieCooldown)
+                        {
+                            hoodieCount = DateTime.Now;
+                            if (hoodieColor == "Black")
+                            {
+                                cthoodieBlack++;
+                              
+                            }
+
+                            if (hoodieColor == "Pink")
+                            {
+                                cthoodiePink++;
+                              
+                            }
+
+                            if (hoodieColor == "Burgundy")
+                            {
+                                cthoodieBurgundy++;
+                                this.Text = "" + cthoodieBurgundy;
+                            }
+                            if (hoodieColor == "Grey")
+                            {
+                                cthoodieGrey++;
+                                
+                            }
+                        }
+                    }
+
+                    if (tobj.SymbolID == 4 && clothes)
+                    {
+                        if ((DateTime.Now - hoodieCount).TotalSeconds > hoodieCooldown)
+                        {
+                            hoodieCount = DateTime.Now;
+                            if (hoodieColor == "Black")
+                            {
+                                if (cthoodieBlack >= 0)
+                                {
+                                    cthoodieBlack--;
+                                }
+
+                              
+                            }
+
+                            if (hoodieColor == "Pink")
+                            {
+                                if (cthoodiePink >= 0)
+                                {
+
+                                    cthoodiePink--;
+                                }
+                              
+                            }
+
+                            if (hoodieColor == "Burgundy")
+                            {
+                                if (cthoodieBurgundy >= 0)
+                                {
+
+                                    cthoodieBurgundy--;
+                                }
+                               
+                            }
+                            if (hoodieColor == "Grey")
+                            {
+                                if (cthoodieGrey >= 0)
+                                {
+
+                                    cthoodieGrey--;
+                                }
+                            }
+                        }
+                    }
+                    if (tobj.SymbolID == 5 && clothes)
+                    {
+                        if (hoodieColor == "Black")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+
+                        if (hoodieColor == "Pink")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+
+                        if (hoodieColor == "Burgundy")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+                        if (hoodieColor == "Grey")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+                    }
+                    if (tobj.SymbolID == 6&&checkout)
+                    {
+                        checkout = false;
+                        clothes = false;
+                        home = false;
+                        login = false;
+                        thankyou = true;
+
+                    }
+
+
+
+
 
                     ///Handle Page Switching
                     if (tobj.SymbolID == 1)
