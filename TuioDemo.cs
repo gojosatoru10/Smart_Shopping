@@ -313,7 +313,7 @@ public class TuioDemo : Form, TuioListener
         /// Draws The Checkout Screen
         void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(Path.Combine(themePath, $"checkout{checkoutHodieColor}.png"));
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"Checkout{checkoutHodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
