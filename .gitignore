@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE settings
+.vscode/
+
+# NuGet packages
+*.nupkg
+packages/
+
+# Logs and temp
+*.log
+*.tmp
+[Tt]humbs.db
+[Dd]esktop.ini
