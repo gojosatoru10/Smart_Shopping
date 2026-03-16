@@ -380,7 +380,7 @@ public class TuioDemo : Form, TuioListener
                     ///
 
                     /// Handle Hoodie Color Switching
-                    if (tobj.SymbolID == 1)
+                    if (tobj.SymbolID == 2)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
                         {
@@ -404,7 +404,7 @@ public class TuioDemo : Form, TuioListener
                     ///
 
                     ///Handle Page Switching
-                    if (tobj.SymbolID == 2)
+                    if (tobj.SymbolID == 1)
                     {
                         if ((DateTime.Now - pageSwitch).TotalSeconds > pageCooldown)
                         {
