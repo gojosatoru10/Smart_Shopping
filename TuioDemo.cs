@@ -1,11 +1,12 @@
 
 using System;
-using System.Drawing;
-using System.Windows.Forms;
-using System.ComponentModel;
-using System.Collections.Generic;
 using System.Collections;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
+using System.IO;
 using System.Threading;
+using System.Windows.Forms;
 using TUIO;
 
 public class TuioDemo : Form, TuioListener
@@ -27,8 +28,14 @@ public class TuioDemo : Form, TuioListener
     private bool verbose;
     public bool home = true, login = false, clothes = false, checkout = false, dark = false;
 
-    public string themePath = @"Light";
+    /// Represents the root file system path for assets.
+    private readonly string assetRootPath;
+    public string themePath;
 
+
+    /// <summary>
+    /// Using the Time of the last switch and a cooldown to prevent multiple switches from one rotation, as the TUIO objects can update very quickly and we only want one switch per rotation.
+    /// </summary>
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
     public DateTime hoodieSwitch = DateTime.MinValue;
@@ -36,6 +43,7 @@ public class TuioDemo : Form, TuioListener
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
 
+    /// Hoodie color state variable to keep track of the current color and switch between them when the corresponding object is rotated.
     private string hoodieColor = "Black";
 
     Font font = new Font("Arial", 10.0f);
@@ -72,7 +80,15 @@ public class TuioDemo : Form, TuioListener
         client = new TuioClient(port);
         client.addTuioListener(this);
 
+
+
+
         client.connect();
+
+        /// Resolve the asset root path and set the initial theme path to the Light theme. This allows for flexibility in where the assets are stored, making it easier to run the application in different environments without needing to change the code.
+        assetRootPath = ResolveAssetRootPath();
+        themePath = Path.Combine(assetRootPath, "Light");
+
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -210,12 +226,15 @@ public class TuioDemo : Form, TuioListener
 
     protected override void OnPaintBackground(PaintEventArgs pevent)
     {
-     // Getting the graphics object
-     Graphics g = pevent.Graphics;
+        // Getting the graphics object
+        Graphics g = pevent.Graphics;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, width, height));
 
 
 
+
+
+        /// Resizes the give image to fit the screen.
         void ResizeImage(ref Bitmap img)
         {
             try
@@ -227,7 +246,12 @@ public class TuioDemo : Form, TuioListener
                 Console.WriteLine("Error resizing image: " + ex.Message);
             }
         }
- void Display_Current_Page(Bitmap currentPage)
+        ///
+
+
+
+        /// Takes the current page from other functions and displays it
+        void Display_Current_Page(Bitmap currentPage)
         {
             try
             {
@@ -243,7 +267,7 @@ public class TuioDemo : Form, TuioListener
         /// Draws The Home Screen
         void DrawHomeScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\home.png");
+            Bitmap img = new Bitmap(Path.Combine(themePath, "Home.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -252,12 +276,13 @@ public class TuioDemo : Form, TuioListener
         {
             DrawHomeScreen();
         }
+        ///
 
 
-    /// Draws The Login Screen
-     void DrawLoginScreen()
+        /// Draws The Login Screen
+        void DrawLoginScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\Login.png");
+            Bitmap img = new Bitmap(Path.Combine(themePath, "Login.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -265,12 +290,13 @@ public class TuioDemo : Form, TuioListener
         {
             DrawLoginScreen();
         }
-     ///
+        ///
 
-     /// Draws The Clothes Screen
-     void DrawClothesScreen()
+
+        /// Draws The Clothes Screen
+        void DrawClothesScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\Clothes" + hoodieColor + ".png");
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"Select{hoodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -278,13 +304,13 @@ public class TuioDemo : Form, TuioListener
         {
             DrawClothesScreen();
         }
-  ///
+        ///
 
 
-  /// Draws The Checkout Screen
-     void DrawCheckoutScreen()
+        /// Draws The Checkout Screen
+        void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(themePath + @"\\Checkout" + hoodieColor + ".png");
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"Select{hoodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -292,9 +318,9 @@ public class TuioDemo : Form, TuioListener
         {
             DrawCheckoutScreen();
         }
-  ///
+        ///
 
-     // draw the cursor path
+        // draw the cursor path
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -316,11 +342,12 @@ public class TuioDemo : Form, TuioListener
             }
         }
 
-         // draw the objects
-         if (objectList.Count > 0)
+        // draw the objects
+        if (objectList.Count > 0)
         {
             lock (objectList)
             {
+                /// Define the order of hoodie colors for switching
                 string[] hoodieOrder = { "Black", "Grey", "Burgundy", "Pink" };
 
                 foreach (TuioObject tobj in objectList.Values)
@@ -329,6 +356,7 @@ public class TuioDemo : Form, TuioListener
                     int oy = tobj.getScreenY(height);
                     int size = height / 10;
 
+                    /// Handle Theme Switching
                     if (tobj.SymbolID == 0)
                     {
                         if ((DateTime.Now - themeSwitch).TotalSeconds > cooldownSeconds)
@@ -346,7 +374,9 @@ public class TuioDemo : Form, TuioListener
                             }
                         }
                     }
+                    ///
 
+                    /// Handle Hoodie Color Switching
                     if (tobj.SymbolID == 1)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
@@ -368,12 +398,15 @@ public class TuioDemo : Form, TuioListener
                             hoodieColor = hoodieOrder[currentIndex];
                         }
                     }
+                    ///
 
+                    ///Handle Page Switching
                     if (tobj.SymbolID == 2)
                     {
                         if ((DateTime.Now - pageSwitch).TotalSeconds > pageCooldown)
                         {
                             pageSwitch = DateTime.Now;
+                            /// The page switching logic is based on the current page and the direction of rotation. If the object is rotated clockwise (between 20 and 90 degrees), it moves to the next page in the sequence. If it is rotated counterclockwise (between 270 and 340 degrees), it moves to the previous page. The sequence of pages is Home -> Login -> Clothes -> Checkout -> Home.
                             if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
                             {
                                 if (home == true)
@@ -397,7 +430,9 @@ public class TuioDemo : Form, TuioListener
                                     home = true;
                                 }
                             }
-
+                            ///
+                            
+                            /// The counterclockwise rotation logic is the reverse of the clockwise logic, allowing users to navigate back through the pages in the opposite direction.
                             else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
                             {
                                 if (login == true)
@@ -421,9 +456,12 @@ public class TuioDemo : Form, TuioListener
                                     checkout = true;
                                 }
                             }
+                            ///
                         }
                     }
+                    ///
 
+                    /// Only draw the objects if they are the ones we are using for page switching or hoodie color switching
                     if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
                     {
                         g.TranslateTransform(ox, oy);
@@ -438,14 +476,15 @@ public class TuioDemo : Form, TuioListener
 
                         g.DrawString(tobj.AngleDegrees + "", font, fntBrush, new PointF(ox - 10, oy - 10));
                     }
+                    ///
                 }
             }
 
 
 
 
-        // draw the blobs
-             if (blobList.Count > 0)
+            // draw the blobs
+            if (blobList.Count > 0)
             {
                 lock (blobList)
                 {
@@ -472,6 +511,31 @@ public class TuioDemo : Form, TuioListener
             }
         }
     }
+
+
+    /// <summary>
+    /// Resolves the root path to the assets directory based on the application's base directory.
+    /// </summary>
+    /// <returns>The full path to the assets directory if found; otherwise, the application's base directory.</returns>
+    private static string ResolveAssetRootPath()
+    {
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string projectAssets = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "Assests"));
+
+        if (Directory.Exists(projectAssets))
+        {
+            return projectAssets;
+        }
+
+        string localAssets = Path.Combine(baseDir, "Assests");
+        if (Directory.Exists(localAssets))
+        {
+            return localAssets;
+        }
+
+        return baseDir;
+    }
+    ///
 
     public static void Main(String[] argv)
     {
