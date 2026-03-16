@@ -313,7 +313,7 @@ public class TuioDemo : Form, TuioListener
         /// Draws The Checkout Screen
         void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(Path.Combine(themePath, $"checkout{checkoutHodieColor}.png"));
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"Checkout{checkoutHodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -380,7 +380,7 @@ public class TuioDemo : Form, TuioListener
                     ///
 
                     /// Handle Hoodie Color Switching
-                    if (tobj.SymbolID == 1)
+                    if (tobj.SymbolID == 2)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
                         {
@@ -404,7 +404,7 @@ public class TuioDemo : Form, TuioListener
                     ///
 
                     ///Handle Page Switching
-                    if (tobj.SymbolID == 2)
+                    if (tobj.SymbolID == 1)
                     {
                         if ((DateTime.Now - pageSwitch).TotalSeconds > pageCooldown)
                         {
