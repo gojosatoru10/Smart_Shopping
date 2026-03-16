@@ -46,6 +46,9 @@ public class TuioDemo : Form, TuioListener
     /// Hoodie color state variable to keep track of the current color and switch between them when the corresponding object is rotated.
     private string hoodieColor = "Black";
 
+    /// checkout hoodie color state variable to keep track of the current color for the checkout page, allowing it to reflect the selected hoodie color from the clothes page.
+    private string checkoutHodieColor = ""; 
+
     Font font = new Font("Arial", 10.0f);
     SolidBrush fntBrush = new SolidBrush(Color.White);
     SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0, 0, 64));
@@ -310,7 +313,7 @@ public class TuioDemo : Form, TuioListener
         /// Draws The Checkout Screen
         void DrawCheckoutScreen()
         {
-            Bitmap img = new Bitmap(Path.Combine(themePath, $"Select{hoodieColor}.png"));
+            Bitmap img = new Bitmap(Path.Combine(themePath, $"checkout{checkoutHodieColor}.png"));
             ResizeImage(ref img);
             Display_Current_Page(img);
         }
@@ -366,11 +369,11 @@ public class TuioDemo : Form, TuioListener
 
                             if (!dark)
                             {
-                                themePath = @"Light";
+                                themePath = Path.Combine(assetRootPath, "Light"); ;
                             }
                             else
                             {
-                                themePath = @"Dark";
+                                themePath = Path.Combine(assetRootPath, "Dark");
                             }
                         }
                     }
