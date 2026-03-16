@@ -477,7 +477,7 @@ public class TuioDemo : Form, TuioListener
                             hoodieCount = DateTime.Now;
                             if (hoodieColor == "Black")
                             {
-                                if (cthoodieBlack >= 0)
+                                if (cthoodieBlack > 0)
                                 {
                                     cthoodieBlack--;
                                 }
@@ -487,7 +487,7 @@ public class TuioDemo : Form, TuioListener
 
                             if (hoodieColor == "Pink")
                             {
-                                if (cthoodiePink >= 0)
+                                if (cthoodiePink > 0)
                                 {
 
                                     cthoodiePink--;
@@ -497,7 +497,7 @@ public class TuioDemo : Form, TuioListener
 
                             if (hoodieColor == "Burgundy")
                             {
-                                if (cthoodieBurgundy >= 0)
+                                if (cthoodieBurgundy > 0)
                                 {
 
                                     cthoodieBurgundy--;
@@ -506,7 +506,7 @@ public class TuioDemo : Form, TuioListener
                             }
                             if (hoodieColor == "Grey")
                             {
-                                if (cthoodieGrey >= 0)
+                                if (cthoodieGrey > 0)
                                 {
 
                                     cthoodieGrey--;
