@@ -26,10 +26,14 @@ public class TuioDemo : Form, TuioListener
 
     private bool fullscreen;
     private bool verbose;
+
+    /// State variables for the different pages of the application, allowing for easy switching between them based on user interactions with the TUIO objects.
     public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou=false;
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
+
+    /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
 
 
@@ -439,7 +443,8 @@ public class TuioDemo : Form, TuioListener
                             hoodieColor = hoodieOrder[currentIndex];
                         }
                     }
-                    ///
+
+                    /// Handles the logic for adding and removing hoodies from the cart based on the rotation of the object with SymbolID 4, allowing users to adjust the quantity of the selected hoodie color before proceeding to checkout.
                     if (tobj.SymbolID == 3 && clothes)
                     {
                         if ((DateTime.Now - hoodieCount).TotalSeconds > hoodieCooldown)
@@ -470,6 +475,7 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
+                    /// Handles Hoodie Count Decreasing, ensuring it doesn't go below 0 and only updates once per rotation using a cooldown.
                     if (tobj.SymbolID == 4 && clothes)
                     {
                         if ((DateTime.Now - hoodieCount).TotalSeconds > hoodieCooldown)
@@ -514,6 +520,8 @@ public class TuioDemo : Form, TuioListener
                             }
                         }
                     }
+
+                    /// Handles the logic for proceeding to checkout when the object with SymbolID 5 is rotated, ensuring that the user has selected a hoodie color and quantity before allowing them to move to the checkout page.
                     if (tobj.SymbolID == 5 && clothes)
                     {
                         if (hoodieColor == "Black")
@@ -539,8 +547,11 @@ public class TuioDemo : Form, TuioListener
                             checkout = true;
                         }
                     }
+
+                    /// Handles the logic for confirming the purchase and displaying the thank you screen when the object with SymbolID 6 is rotated on the checkout page, allowing users to complete their transaction and receive confirmation of their order.
                     if (tobj.SymbolID == 6&&checkout)
                     {
+
                         checkout = false;
                         clothes = false;
                         home = false;
