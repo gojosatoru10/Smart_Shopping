@@ -1,13 +1,12 @@
-﻿
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Windows.Forms;
 using TUIO;
 
@@ -28,7 +27,7 @@ public class TuioDemo : Form, TuioListener
 
     private bool fullscreen;
     private bool verbose;
-    public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false;
+    public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false, loginsteps = false, signupsteps = false;
     int ctBlackJacket = 0, ctDenimJacket = 0, ctDenimPants = 0, ctNavyShirt = 0, ctBlackPants = 0, ctBurgundyShirt = 0, ctBlackHoodie = 0, ctPinkHoodie = 0;
 
     /// Represents the root file system path for assets.
@@ -53,6 +52,7 @@ public class TuioDemo : Form, TuioListener
 
     // Selection and Scroll tracking
     int scrollIndex = 0; // Current starting card
+    int selectionIndex = 0; // Which visible card is selected (0-3)
     DateTime lastScrollTime = DateTime.Now;
     DateTime lastSelectionTime = DateTime.Now;
 
@@ -60,6 +60,9 @@ public class TuioDemo : Form, TuioListener
     string currentTop;    // Default starting top
     string currentBottom; // Default starting bottom
     int cartScrollIndex = 0; // For scrolling through cart items in outfit builder
+    int selectedMenuCategory = -1; // -1 = no category selected, 0-4 = category index
+    int menuHoverIndex = 0; // Current hover position in the circular menu (0-4)
+    DateTime lastMenuRotateTime = DateTime.Now;
 
     // --- Scroll Tracking for Outfit Builder ---
     // Index 0: Shirts, 1: Hoodies, 2: Jackets, 3: Pants, 4: Shorts
@@ -84,14 +87,11 @@ public class TuioDemo : Form, TuioListener
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
 
-    int selectedHomeCard = 0; // 0: Bestsellers, 1: Deals, 2: Outfit Builder
+    int selectedHomeCard = 0;
+    int selectedLoginCard = 0;
     DateTime homeSwitchTime = DateTime.Now;
 
-    /// Hoodie color state variable to keep track of the current color and switch between them when the corresponding object is rotated.
     private string hoodieColor = "Black";
-
-    /// checkout hoodie color state variable to keep track of the current color for the checkout page, allowing it to reflect the selected hoodie color from the clothes page.
-    private string checkoutHodieColor = "";
 
     private int cthoodieBlack = 0;
     private int cthoodieGrey = 0;
@@ -344,11 +344,24 @@ public class TuioDemo : Form, TuioListener
                 float baseY = ch * 0.35f;
 
                 // 3. Colors
-                Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(222, 200, 150);
-                Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
-                Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40); // Selection border color
-
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
+                Color cardColor;
+                Color shadowColor;
+                Color selectionColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    cardColor = Color.FromArgb(130, 130, 130);
+                    shadowColor = Color.FromArgb(70, 70, 70);
+                    selectionColor = Color.White;
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    cardColor = Color.FromArgb(222, 200, 150);
+                    shadowColor = Color.FromArgb(180, 160, 110);
+                    selectionColor = Color.FromArgb(100, 70, 40);
+                    textBrush = Brushes.Black;
+                }
                 Font textFont = new Font("Vladimir Script", 36f, FontStyle.Regular);
 
                 string[] titles = { "Bestsellers", "Deals", "Outfit Builder" };
@@ -362,8 +375,18 @@ public class TuioDemo : Form, TuioListener
                     bool isSelected = (selectedHomeCard == i);
 
                     float x = startX + i * (cardWidth + spacing);
-                    float y = isSelected ? baseY - 15 : baseY; // Lift selected card slightly
-                    float shadowOffset = isSelected ? 15 : 10;
+                    float y;
+                    float shadowOffset;
+                    if (isSelected)
+                    {
+                        y = baseY - 15;
+                        shadowOffset = 15;
+                    }
+                    else
+                    {
+                        y = baseY;
+                        shadowOffset = 10;
+                    }
 
                     RectangleF cardRect = new RectangleF(x, y, cardWidth, cardHeight);
                     RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
@@ -386,7 +409,19 @@ public class TuioDemo : Form, TuioListener
                     using (GraphicsPath path = RoundedRect(cardRect, 30))
                     {
                         g.FillPath(new SolidBrush(cardColor), path);
-                        using (Pen highlightPen = new Pen(isSelected ? selectionColor : Color.White, isSelected ? 3 : 1))
+                        Color penColor;
+                        int penWidth;
+                        if (isSelected)
+                        {
+                            penColor = selectionColor;
+                            penWidth = 3;
+                        }
+                        else
+                        {
+                            penColor = Color.White;
+                            penWidth = 1;
+                        }
+                        using (Pen highlightPen = new Pen(penColor, penWidth))
                             g.DrawPath(highlightPen, path);
                     }
 
@@ -463,10 +498,21 @@ public class TuioDemo : Form, TuioListener
                     shadowColor = Color.FromArgb(190, 170, 120);
                 }
 
+                Color selectionColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    selectionColor = Color.White;
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    selectionColor = Color.FromArgb(100, 70, 40);
+                    textBrush = Brushes.Black;
+                }
                 Brush circleBrush = new SolidBrush(circleColor);
                 Brush shadowBrush = new SolidBrush(shadowColor);
                 Font loginFont = new Font("Vladimir Script", 66f, FontStyle.Regular);
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
 
                 // 4. Position Circles
                 string[] labels = { "Login", "Signup" };
@@ -476,24 +522,58 @@ public class TuioDemo : Form, TuioListener
                 float startX = (cw - totalWidth) / 2;
                 float centerY = (ch - circleSize) / 2;
 
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
                 // 5. Drawing Loop
                 for (int i = 0; i < 2; i++)
                 {
+                    bool isSelected = (selectedLoginCard == i);
+
                     float x = startX + i * (circleSize + spacing);
-                    float y = centerY;
+                    float y;
+                    float shadowOffset;
+                    if (isSelected)
+                    {
+                        y = centerY - 15;
+                        shadowOffset = 15;
+                    }
+                    else
+                    {
+                        y = centerY;
+                        shadowOffset = 12;
+                    }
 
                     RectangleF circleRect = new RectangleF(x, y, circleSize, circleSize);
 
-                    // Shadow Offset
-                    float offset = 12f;
-                    g.FillEllipse(shadowBrush, x + offset, y + offset, circleSize, circleSize);
+                    // Shadow
+                    g.FillEllipse(shadowBrush, x + shadowOffset, y + shadowOffset, circleSize, circleSize);
+
+                    // Selection Border (like home page)
+                    if (isSelected)
+                    {
+                        using (Pen selPen = new Pen(selectionColor, 5))
+                        {
+                            g.DrawEllipse(selPen, x - 5, y - 5, circleSize + 10, circleSize + 10);
+                        }
+                    }
 
                     // Main Circle
-                    g.SmoothingMode = SmoothingMode.AntiAlias;
                     g.FillEllipse(circleBrush, circleRect);
 
-                    // White Border
-                    using (Pen borderPen = new Pen(Color.White, 3))
+                    // Border
+                    Color borderColor;
+                    int borderWidth;
+                    if (isSelected)
+                    {
+                        borderColor = selectionColor;
+                        borderWidth = 3;
+                    }
+                    else
+                    {
+                        borderColor = Color.White;
+                        borderWidth = 2;
+                    }
+                    using (Pen borderPen = new Pen(borderColor, borderWidth))
                     {
                         g.DrawEllipse(borderPen, circleRect);
                     }
@@ -517,164 +597,504 @@ public class TuioDemo : Form, TuioListener
         ///
 
 
+        /// Draws The Login Steps Screen
+        void DrawLoginStepsScreen()
+        {
+            try
+            {
+                // 1. Draw Background
+                using (Bitmap bg = new Bitmap(Path.Combine(themePath, "Background.png")))
+                {
+                    Bitmap tempBg = bg;
+                    ResizeImage(ref tempBg);
+                    g.DrawImage(tempBg, 0, 0);
+                }
+
+                float cw = ClientSize.Width;
+                float ch = ClientSize.Height;
+
+                // Draw Logo
+                try
+                {
+                    using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
+                    {
+                        g.DrawImage(logo, -100, 0, 400, 200);
+                    }
+                }
+                catch { }
+
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                // Setup Colors - Same as other cards in the app
+                Color cardColor;
+                Color shadowColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    cardColor = Color.FromArgb(130, 130, 130);
+                    shadowColor = Color.FromArgb(70, 70, 70);
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    cardColor = Color.FromArgb(235, 215, 160);
+                    shadowColor = Color.FromArgb(180, 160, 110);
+                    textBrush = Brushes.Black;
+                }
+
+                // Card dimensions - same style as home page
+                float cardWidth = cw * 0.28f;
+                float cardHeight = 90f;
+                float cardX = (cw - cardWidth) / 2;
+
+                // Card 1: Open Your Bluetooth
+                float card1Y = ch * 0.35f;
+                RectangleF card1Rect = new RectangleF(cardX, card1Y, cardWidth, cardHeight);
+                RectangleF shadow1Rect = new RectangleF(cardX + 10, card1Y + 10, cardWidth, cardHeight);
+
+                using (GraphicsPath shadow1Path = RoundedRect(shadow1Rect, 30))
+                    g.FillPath(new SolidBrush(shadowColor), shadow1Path);
+                using (GraphicsPath card1Path = RoundedRect(card1Rect, 30))
+                {
+                    g.FillPath(new SolidBrush(cardColor), card1Path);
+                    g.DrawPath(new Pen(Color.White, 2), card1Path);
+                }
+                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                {
+                    string txt1 = "Open Your Bluetooth";
+                    SizeF sz1 = g.MeasureString(txt1, cardFont);
+                    g.DrawString(txt1, cardFont, textBrush, cardX + (cardWidth - sz1.Width) / 2, card1Y + (cardHeight - sz1.Height) / 2);
+                }
+
+                // Card 2: Connect to DELLG15
+                float card2Y = ch * 0.55f;
+                RectangleF card2Rect = new RectangleF(cardX, card2Y, cardWidth, cardHeight);
+                RectangleF shadow2Rect = new RectangleF(cardX + 10, card2Y + 10, cardWidth, cardHeight);
+
+                using (GraphicsPath shadow2Path = RoundedRect(shadow2Rect, 30))
+                    g.FillPath(new SolidBrush(shadowColor), shadow2Path);
+                using (GraphicsPath card2Path = RoundedRect(card2Rect, 30))
+                {
+                    g.FillPath(new SolidBrush(cardColor), card2Path);
+                    g.DrawPath(new Pen(Color.White, 2), card2Path);
+                }
+                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                {
+                    string txt2 = "Connect to DELLG15";
+                    SizeF sz2 = g.MeasureString(txt2, cardFont);
+                    g.DrawString(txt2, cardFont, textBrush, cardX + (cardWidth - sz2.Width) / 2, card2Y + (cardHeight - sz2.Height) / 2);
+                }
+
+                // === BACK BUTTON (ID 10) ===
+                float backBtnSize = 70f;
+                float margin = 30f;
+                RectangleF backRect = new RectangleF(cw - backBtnSize - margin, margin, backBtnSize, backBtnSize);
+                bool backActive = false;
+                lock (objectList)
+                {
+                    foreach (TuioObject obj in objectList.Values)
+                    {
+                        if (obj.SymbolID == 10)
+                        {
+                            backActive = true;
+                            break;
+                        }
+                    }
+                }
+
+                Color btnBaseColor;
+                if (dark)
+                {
+                    btnBaseColor = Color.FromArgb(70, 90, 120);
+                }
+                else
+                {
+                    btnBaseColor = Color.FromArgb(255, 190, 100);
+                }
+
+                Color backBtnColor;
+                Color backPenColor;
+                if (dark)
+                {
+                    backPenColor = Color.White;
+                }
+                else
+                {
+                    backPenColor = Color.Black;
+                }
+                if (backActive)
+                {
+                    backBtnColor = Color.Gold;
+                }
+                else
+                {
+                    backBtnColor = btnBaseColor;
+                }
+
+                g.FillEllipse(new SolidBrush(shadowColor), backRect.X, backRect.Y + 4, backBtnSize, backBtnSize);
+                g.FillEllipse(new SolidBrush(backBtnColor), backRect);
+                g.DrawEllipse(new Pen(backPenColor, 2), backRect);
+
+                using (Font backFont = new Font("Segoe UI", 12, FontStyle.Bold))
+                {
+                    string backTxt = "BACK";
+                    SizeF backSz = g.MeasureString(backTxt, backFont);
+                    g.DrawString(backTxt, backFont, textBrush, backRect.X + (backBtnSize - backSz.Width) / 2 + 2, backRect.Y + (backBtnSize - backSz.Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error drawing Login Steps Screen: " + ex.Message);
+            }
+        }
+        if (loginsteps == true)
+        {
+            DrawLoginStepsScreen();
+        }
+        ///
+
+
+        /// Draws The Signup Steps Screen
+        void DrawSignupStepsScreen()
+        {
+            try
+            {
+                // 1. Draw Background
+                using (Bitmap bg = new Bitmap(Path.Combine(themePath, "Background.png")))
+                {
+                    Bitmap tempBg = bg;
+                    ResizeImage(ref tempBg);
+                    g.DrawImage(tempBg, 0, 0);
+                }
+
+                float cw = ClientSize.Width;
+                float ch = ClientSize.Height;
+
+                // Draw Logo
+                try
+                {
+                    using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
+                    {
+                        g.DrawImage(logo, -100, 0, 400, 200);
+                    }
+                }
+                catch { }
+
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                // Setup Colors - Same as other cards in the app
+                Color cardColor;
+                Color shadowColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    cardColor = Color.FromArgb(130, 130, 130);
+                    shadowColor = Color.FromArgb(70, 70, 70);
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    cardColor = Color.FromArgb(235, 215, 160);
+                    shadowColor = Color.FromArgb(180, 160, 110);
+                    textBrush = Brushes.Black;
+                }
+
+                // Card dimensions - same style as home page
+                float cardWidth = cw * 0.28f;
+                float cardHeight = 90f;
+                float cardX = (cw - cardWidth) / 2;
+
+                // Card 1: Open Your Bluetooth
+                float card1Y = ch * 0.28f;
+                RectangleF card1Rect = new RectangleF(cardX, card1Y, cardWidth, cardHeight);
+                RectangleF shadow1Rect = new RectangleF(cardX + 10, card1Y + 10, cardWidth, cardHeight);
+
+                using (GraphicsPath shadow1Path = RoundedRect(shadow1Rect, 30))
+                    g.FillPath(new SolidBrush(shadowColor), shadow1Path);
+                using (GraphicsPath card1Path = RoundedRect(card1Rect, 30))
+                {
+                    g.FillPath(new SolidBrush(cardColor), card1Path);
+                    g.DrawPath(new Pen(Color.White, 2), card1Path);
+                }
+                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                {
+                    string txt1 = "Open Your Bluetooth";
+                    SizeF sz1 = g.MeasureString(txt1, cardFont);
+                    g.DrawString(txt1, cardFont, textBrush, cardX + (cardWidth - sz1.Width) / 2, card1Y + (cardHeight - sz1.Height) / 2);
+                }
+
+                // Card 2: Pair to DELLG15
+                float card2Y = ch * 0.45f;
+                RectangleF card2Rect = new RectangleF(cardX, card2Y, cardWidth, cardHeight);
+                RectangleF shadow2Rect = new RectangleF(cardX + 10, card2Y + 10, cardWidth, cardHeight);
+
+                using (GraphicsPath shadow2Path = RoundedRect(shadow2Rect, 30))
+                    g.FillPath(new SolidBrush(shadowColor), shadow2Path);
+                using (GraphicsPath card2Path = RoundedRect(card2Rect, 30))
+                {
+                    g.FillPath(new SolidBrush(cardColor), card2Path);
+                    g.DrawPath(new Pen(Color.White, 2), card2Path);
+                }
+                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                {
+                    string txt2 = "Pair to DELLG15";
+                    SizeF sz2 = g.MeasureString(txt2, cardFont);
+                    g.DrawString(txt2, cardFont, textBrush, cardX + (cardWidth - sz2.Width) / 2, card2Y + (cardHeight - sz2.Height) / 2);
+                }
+
+                // Card 3: Accept Connection Request
+                float card3Y = ch * 0.62f;
+                float card3Height = cardHeight + 20;
+                RectangleF card3Rect = new RectangleF(cardX, card3Y, cardWidth, card3Height);
+                RectangleF shadow3Rect = new RectangleF(cardX + 10, card3Y + 10, cardWidth, card3Height);
+
+                using (GraphicsPath shadow3Path = RoundedRect(shadow3Rect, 30))
+                    g.FillPath(new SolidBrush(shadowColor), shadow3Path);
+                using (GraphicsPath card3Path = RoundedRect(card3Rect, 30))
+                {
+                    g.FillPath(new SolidBrush(cardColor), card3Path);
+                    g.DrawPath(new Pen(Color.White, 2), card3Path);
+                }
+                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                {
+                    string txt3Line1 = "Accept Connection";
+                    string txt3Line2 = "Request";
+                    SizeF sz3a = g.MeasureString(txt3Line1, cardFont);
+                    SizeF sz3b = g.MeasureString(txt3Line2, cardFont);
+                    float lineHeight = sz3a.Height;
+                    float totalHeight = lineHeight * 2;
+                    float startY = card3Y + (card3Height - totalHeight) / 2;
+                    g.DrawString(txt3Line1, cardFont, textBrush, cardX + (cardWidth - sz3a.Width) / 2, startY);
+                    g.DrawString(txt3Line2, cardFont, textBrush, cardX + (cardWidth - sz3b.Width) / 2, startY + lineHeight);
+                }
+
+                // === BACK BUTTON (ID 10) ===
+                float backBtnSize = 70f;
+                float margin = 30f;
+                RectangleF backRect = new RectangleF(cw - backBtnSize - margin, margin, backBtnSize, backBtnSize);
+                bool backActive = false;
+                lock (objectList)
+                {
+                    foreach (TuioObject obj in objectList.Values)
+                    {
+                        if (obj.SymbolID == 10)
+                        {
+                            backActive = true;
+                            break;
+                        }
+                    }
+                }
+
+                Color btnBaseColor;
+                if (dark)
+                {
+                    btnBaseColor = Color.FromArgb(70, 90, 120);
+                }
+                else
+                {
+                    btnBaseColor = Color.FromArgb(255, 190, 100);
+                }
+
+                Color backBtnColor;
+                Color backPenColor;
+                if (dark)
+                {
+                    backPenColor = Color.White;
+                }
+                else
+                {
+                    backPenColor = Color.Black;
+                }
+                if (backActive)
+                {
+                    backBtnColor = Color.Gold;
+                }
+                else
+                {
+                    backBtnColor = btnBaseColor;
+                }
+
+                g.FillEllipse(new SolidBrush(shadowColor), backRect.X, backRect.Y + 4, backBtnSize, backBtnSize);
+                g.FillEllipse(new SolidBrush(backBtnColor), backRect);
+                g.DrawEllipse(new Pen(backPenColor, 2), backRect);
+
+                using (Font backFont = new Font("Segoe UI", 12, FontStyle.Bold))
+                {
+                    string backTxt = "BACK";
+                    SizeF backSz = g.MeasureString(backTxt, backFont);
+                    g.DrawString(backTxt, backFont, textBrush, backRect.X + (backBtnSize - backSz.Width) / 2 + 2, backRect.Y + (backBtnSize - backSz.Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error drawing Signup Steps Screen: " + ex.Message);
+            }
+        }
+        if (signupsteps == true)
+        {
+            DrawSignupStepsScreen();
+        }
+        ///
+
+
         /// Draws The Clothes Screen
-        //void DrawClothesScreen()
-        //{
-        //    try
-        //    {
-        //        // 1. Draw Background
-        //        using (Bitmap bg = new Bitmap(Path.Combine(themePath, "Background.png")))
-        //        {
-        //            Bitmap tempBg = bg;
-        //            ResizeImage(ref tempBg);
-        //            g.DrawImage(tempBg, 0, 0);
-        //        }
+        void DrawClothesScreen()
+        {
+            try
+            {
+                // 1. Draw Background
+                using (Bitmap bg = new Bitmap(Path.Combine(themePath, "Background.png")))
+                {
+                    Bitmap tempBg = bg;
+                    ResizeImage(ref tempBg);
+                    g.DrawImage(tempBg, 0, 0);
+                }
 
-        //        float cw = ClientSize.Width;
-        //        float ch = ClientSize.Height;
+                float cw = ClientSize.Width;
+                float ch = ClientSize.Height;
 
-        //        // Draw Logo
-        //        try
-        //        {
-        //            using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-        //                g.DrawImage(logo, -100, 0, 400, 200);
-        //        }
-        //        catch { }
+                // Draw Logo
+                try
+                {
+                    using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
+                        g.DrawImage(logo, -100, 0, 400, 200);
+                }
+                catch { }
 
-        //        // 2. Layout Setup
-        //        string[] hoodieNames = { "Black", "Grey", "Burgundy", "Pink" };
-        //        string[] hoodieFiles = { "BlackHoodie.png", "GreyHoodie.png", "BurgundyHoodie.png", "PinkHoodie.png" };
-        //        int[] counts = { cthoodieBlack, cthoodieGrey, cthoodieBurgundy, cthoodiePink };
+                // 2. Layout Setup
+                string[] hoodieNames = { "Black", "Grey", "Burgundy", "Pink" };
+                string[] hoodieFiles = { "BlackHoodie.png", "GreyHoodie.png", "BurgundyHoodie.png", "PinkHoodie.png" };
+                int[] counts = { cthoodieBlack, cthoodieGrey, cthoodieBurgundy, cthoodiePink };
 
-        //        float cardWidth = cw * 0.20f;
-        //        float cardHeight = ch * 0.35f;
-        //        float spacing = cw * 0.03f;
-        //        float startX = (cw - (4 * cardWidth + 3 * spacing)) / 2;
-        //        float baseY = ch * 0.30f;
+                float cardWidth = cw * 0.20f;
+                float cardHeight = ch * 0.35f;
+                float spacing = cw * 0.03f;
+                float startX = (cw - (4 * cardWidth + 3 * spacing)) / 2;
+                float baseY = ch * 0.30f;
 
-        //        // 3. Theme Colors
-        //        Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
-        //        Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
-        //        Color barColor = dark ? Color.FromArgb(55, 55, 55) : Color.FromArgb(220, 200, 150);
-        //        Color btnBaseColor = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
-        //        Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40); // Same as Home Screen
+                // 3. Theme Colors
+                Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
+                Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
+                Color barColor = dark ? Color.FromArgb(55, 55, 55) : Color.FromArgb(220, 200, 150);
+                Color btnBaseColor = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
+                Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40); // Same as Home Screen
 
-        //        Brush textBrush = dark ? Brushes.White : Brushes.Black;
-        //        Pen btnOutline = new Pen(Color.Black, 2);
+                Brush textBrush = dark ? Brushes.White : Brushes.Black;
+                Pen btnOutline = new Pen(Color.Black, 2);
 
-        //        g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
 
-        //        for (int i = 0; i < 4; i++)
-        //        {
-        //            bool isSelected = (hoodieColor == hoodieNames[i]);
+                for (int i = 0; i < 4; i++)
+                {
+                    bool isSelected = (hoodieColor == hoodieNames[i]);
 
-        //            float x = startX + i * (cardWidth + spacing);
-        //            // ANIMATION: Lift the card if selected
-        //            float y = isSelected ? baseY - 15 : baseY;
-        //            float shadowOffset = isSelected ? 15 : 10;
+                    float x = startX + i * (cardWidth + spacing);
+                    // ANIMATION: Lift the card if selected
+                    float y = isSelected ? baseY - 15 : baseY;
+                    float shadowOffset = isSelected ? 15 : 10;
 
-        //            RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
-        //            RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
+                    RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
+                    RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
 
-        //            // A. Draw Shadow
-        //            using (GraphicsPath shadowPath = RoundedRect(shadowRect, 25))
-        //                g.FillPath(new SolidBrush(shadowColor), shadowPath);
+                    // A. Draw Shadow
+                    using (GraphicsPath shadowPath = RoundedRect(shadowRect, 25))
+                        g.FillPath(new SolidBrush(shadowColor), shadowPath);
 
-        //            // B. Draw Secondary Selection Border (Same as Home Screen)
-        //            if (isSelected)
-        //            {
-        //                using (GraphicsPath borderPath = RoundedRect(new RectangleF(x - 5, y - 5, cardWidth + 10, cardHeight + 10), 30))
-        //                using (Pen selPen = new Pen(selectionColor, 4))
-        //                {
-        //                    g.DrawPath(selPen, borderPath);
-        //                }
-        //            }
+                    // B. Draw Secondary Selection Border (Same as Home Screen)
+                    if (isSelected)
+                    {
+                        using (GraphicsPath borderPath = RoundedRect(new RectangleF(x - 5, y - 5, cardWidth + 10, cardHeight + 10), 30))
+                        using (Pen selPen = new Pen(selectionColor, 4))
+                        {
+                            g.DrawPath(selPen, borderPath);
+                        }
+                    }
 
-        //            // C. Draw Main Card
-        //            using (GraphicsPath path = RoundedRect(rect, 25))
-        //            {
-        //                g.FillPath(new SolidBrush(cardColor), path);
-        //                using (Pen highlightPen = new Pen(isSelected ? selectionColor : Color.White, isSelected ? 3 : 1))
-        //                    g.DrawPath(highlightPen, path);
-        //            }
+                    // C. Draw Main Card
+                    using (GraphicsPath path = RoundedRect(rect, 25))
+                    {
+                        g.FillPath(new SolidBrush(cardColor), path);
+                        using (Pen highlightPen = new Pen(isSelected ? selectionColor : Color.White, isSelected ? 3 : 1))
+                            g.DrawPath(highlightPen, path);
+                    }
 
-        //            // D. Draw Hoodie Image
-        //            try
-        //            {
-        //                using (Bitmap imgg = new Bitmap(Path.Combine(themePath, hoodieFiles[i])))
-        //                    g.DrawImage(imgg, x, y - 10, cardWidth, cardHeight + 20);
-        //            }
-        //            catch { }
+                    // D. Draw Hoodie Image
+                    try
+                    {
+                        using (Bitmap imgg = new Bitmap(Path.Combine(themePath, hoodieFiles[i])))
+                            g.DrawImage(imgg, x, y - 10, cardWidth, cardHeight + 20);
+                    }
+                    catch { }
 
-        //            // E. Controls Bar (Fixed position relative to card)
-        //            float controlY = ch * 0.70f;
-        //            float btnSize = 55f;
-        //            RectangleF barRect = new RectangleF(x, controlY, cardWidth, btnSize);
-        //            using (GraphicsPath barPath = RoundedRect(barRect, 30))
-        //                g.FillPath(new SolidBrush(barColor), barPath);
+                    // E. Controls Bar (Fixed position relative to card)
+                    float controlY = ch * 0.70f;
+                    float btnSize = 55f;
+                    RectangleF barRect = new RectangleF(x, controlY, cardWidth, btnSize);
+                    using (GraphicsPath barPath = RoundedRect(barRect, 30))
+                        g.FillPath(new SolidBrush(barColor), barPath);
 
-        //            // Plus/Minus Logic
-        //            bool plusPressed = (isSelected && (DateTime.Now - hoodieCount).TotalMilliseconds < 800 && objectList.ContainsKey(3));
-        //            bool minusPressed = (isSelected && (DateTime.Now - hoodieCount).TotalMilliseconds < 800 && objectList.ContainsKey(4));
+                    // Plus/Minus Logic
+                    bool plusPressed = (isSelected && (DateTime.Now - hoodieCount).TotalMilliseconds < 800 && objectList.ContainsKey(3));
+                    bool minusPressed = (isSelected && (DateTime.Now - hoodieCount).TotalMilliseconds < 800 && objectList.ContainsKey(4));
 
-        //            // Plus Button
-        //            RectangleF pRect = new RectangleF(x, controlY, btnSize, btnSize);
-        //            using (Brush b = new SolidBrush(plusPressed ? Color.Gold : btnBaseColor))
-        //            {
-        //                g.FillEllipse(b, pRect);
-        //                g.DrawEllipse(btnOutline, pRect);
-        //                g.DrawString("+", new Font("Arial", 22, FontStyle.Bold), Brushes.Black, x + 14, controlY + 11);
-        //            }
+                    // Plus Button
+                    RectangleF pRect = new RectangleF(x, controlY, btnSize, btnSize);
+                    using (Brush b = new SolidBrush(plusPressed ? Color.Gold : btnBaseColor))
+                    {
+                        g.FillEllipse(b, pRect);
+                        g.DrawEllipse(btnOutline, pRect);
+                        g.DrawString("+", new Font("Arial", 22, FontStyle.Bold), Brushes.Black, x + 14, controlY + 11);
+                    }
 
-        //            // Minus Button
-        //            float mX = x + cardWidth - btnSize;
-        //            RectangleF mRect = new RectangleF(mX, controlY, btnSize, btnSize);
-        //            using (Brush b = new SolidBrush(minusPressed ? Color.Gold : btnBaseColor))
-        //            {
-        //                g.FillEllipse(b, mRect);
-        //                g.DrawEllipse(btnOutline, mRect);
-        //                g.DrawString("-", new Font("Arial", 22, FontStyle.Bold), Brushes.Black, mX + 17, controlY + 8);
-        //            }
+                    // Minus Button
+                    float mX = x + cardWidth - btnSize;
+                    RectangleF mRect = new RectangleF(mX, controlY, btnSize, btnSize);
+                    using (Brush b = new SolidBrush(minusPressed ? Color.Gold : btnBaseColor))
+                    {
+                        g.FillEllipse(b, mRect);
+                        g.DrawEllipse(btnOutline, mRect);
+                        g.DrawString("-", new Font("Arial", 22, FontStyle.Bold), Brushes.Black, mX + 17, controlY + 8);
+                    }
 
-        //            // Quantity Count
-        //            using (Font f = new Font("Arial", 28, FontStyle.Bold))
-        //            {
-        //                string s = counts[i].ToString();
-        //                float tx = x + (cardWidth - g.MeasureString(s, f).Width) / 2;
-        //                g.DrawString(s, f, textBrush, tx, controlY + 4);
-        //            }
+                    // Quantity Count
+                    using (Font f = new Font("Arial", 28, FontStyle.Bold))
+                    {
+                        string s = counts[i].ToString();
+                        float tx = x + (cardWidth - g.MeasureString(s, f).Width) / 2;
+                        g.DrawString(s, f, textBrush, tx, controlY + 4);
+                    }
 
-        //            // F. ADD TO CART Button
-        //            float cartY = controlY + btnSize + 15f;
-        //            float cartH = 48f;
-        //            RectangleF cartRect = new RectangleF(x, cartY, cardWidth, cartH);
+                    // F. ADD TO CART Button
+                    float cartY = controlY + btnSize + 15f;
+                    float cartH = 48f;
+                    RectangleF cartRect = new RectangleF(x, cartY, cardWidth, cartH);
 
-        //            using (Brush sBrush = new SolidBrush(shadowColor))
-        //                g.FillPath(sBrush, RoundedRect(new RectangleF(x, cartY + 4, cardWidth, cartH), 15));
+                    using (Brush sBrush = new SolidBrush(shadowColor))
+                        g.FillPath(sBrush, RoundedRect(new RectangleF(x, cartY + 4, cardWidth, cartH), 15));
 
-        //            using (Brush cBrush = new SolidBrush(btnBaseColor))
-        //            {
-        //                g.FillPath(cBrush, RoundedRect(cartRect, 15));
-        //                using (Pen pen = new Pen(dark ? Color.White : Color.Black, 1))
-        //                    g.DrawPath(pen, RoundedRect(cartRect, 15));
+                    using (Brush cBrush = new SolidBrush(btnBaseColor))
+                    {
+                        g.FillPath(cBrush, RoundedRect(cartRect, 15));
+                        using (Pen pen = new Pen(dark ? Color.White : Color.Black, 1))
+                            g.DrawPath(pen, RoundedRect(cartRect, 15));
 
-        //                string txt = "ADD TO CART";
-        //                using (Font f = new Font("Segoe UI", 12, FontStyle.Bold))
-        //                {
-        //                    SizeF sz = g.MeasureString(txt, f);
-        //                    g.DrawString(txt, f, textBrush, x + (cardWidth - sz.Width) / 2, cartY + (cartH - sz.Height) / 2);
-        //                }
-        //            }
-        //        }
-        //    }
-        //    catch (Exception ex) { Console.WriteLine("Draw Error: " + ex.Message); }
-        //}
-        //if (clothes == true)
-        //{
-        //    //DrawClothesScreen();
-        //}
+                        string txt = "ADD TO CART";
+                        using (Font f = new Font("Segoe UI", 12, FontStyle.Bold))
+                        {
+                            SizeF sz = g.MeasureString(txt, f);
+                            g.DrawString(txt, f, textBrush, x + (cardWidth - sz.Width) / 2, cartY + (cartH - sz.Height) / 2);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("Draw Error: " + ex.Message); }
+        }
+        if (clothes == true)
+        {
+            DrawClothesScreen();
+        }
 
-        // Draws The Bestsellers Screen
+        /// Draws The Bestsellers Screen
         void DrawBestsellersScreen()
         {
             try
@@ -713,13 +1133,30 @@ public class TuioDemo : Form, TuioListener
                 float baseY = ch * 0.30f;
 
                 // 3. Theme Colors
-                Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
-                Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
-                Color barColor = dark ? Color.FromArgb(55, 55, 55) : Color.FromArgb(220, 200, 150);
-                Color btnBaseColor = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
-                Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40);
-
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
+                Color cardColor;
+                Color shadowColor;
+                Color barColor;
+                Color btnBaseColor;
+                Color selectionColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    cardColor = Color.FromArgb(130, 130, 130);
+                    shadowColor = Color.FromArgb(70, 70, 70);
+                    barColor = Color.FromArgb(55, 55, 55);
+                    btnBaseColor = Color.FromArgb(70, 90, 120);
+                    selectionColor = Color.White;
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    cardColor = Color.FromArgb(235, 215, 160);
+                    shadowColor = Color.FromArgb(180, 160, 110);
+                    barColor = Color.FromArgb(220, 200, 150);
+                    btnBaseColor = Color.FromArgb(255, 190, 100);
+                    selectionColor = Color.FromArgb(100, 70, 40);
+                    textBrush = Brushes.Black;
+                }
                 Pen btnOutline = new Pen(Color.Black, 2);
 
                 g.SmoothingMode = SmoothingMode.AntiAlias;
@@ -735,8 +1172,18 @@ public class TuioDemo : Form, TuioListener
                     bool isSelected = (hoodieColor == currentItemName);
 
                     float x = startX + i * (cardWidth + spacing);
-                    float y = isSelected ? baseY - 15 : baseY;
-                    float shadowOffset = isSelected ? 15 : 10;
+                    float y;
+                    float shadowOffset;
+                    if (isSelected)
+                    {
+                        y = baseY - 15;
+                        shadowOffset = 15;
+                    }
+                    else
+                    {
+                        y = baseY;
+                        shadowOffset = 10;
+                    }
 
                     RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
                     RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
@@ -757,7 +1204,19 @@ public class TuioDemo : Form, TuioListener
                     using (GraphicsPath path = RoundedRect(rect, 25))
                     {
                         g.FillPath(new SolidBrush(cardColor), path);
-                        using (Pen highlightPen = new Pen(isSelected ? selectionColor : Color.White, isSelected ? 3 : 1))
+                        Color highlightColor;
+                        int highlightWidth;
+                        if (isSelected)
+                        {
+                            highlightColor = selectionColor;
+                            highlightWidth = 3;
+                        }
+                        else
+                        {
+                            highlightColor = Color.White;
+                            highlightWidth = 1;
+                        }
+                        using (Pen highlightPen = new Pen(highlightColor, highlightWidth))
                             g.DrawPath(highlightPen, path);
                     }
 
@@ -781,7 +1240,16 @@ public class TuioDemo : Form, TuioListener
 
                     // Plus Button
                     RectangleF pRect = new RectangleF(x, controlY, btnSize, btnSize);
-                    using (Brush b = new SolidBrush(plusPressed ? Color.Gold : btnBaseColor))
+                    Color plusColor;
+                    if (plusPressed)
+                    {
+                        plusColor = Color.Gold;
+                    }
+                    else
+                    {
+                        plusColor = btnBaseColor;
+                    }
+                    using (Brush b = new SolidBrush(plusColor))
                     {
                         g.FillEllipse(b, pRect);
                         g.DrawEllipse(btnOutline, pRect);
@@ -791,7 +1259,16 @@ public class TuioDemo : Form, TuioListener
                     // Minus Button
                     float mX = x + cardWidth - btnSize;
                     RectangleF mRect = new RectangleF(mX, controlY, btnSize, btnSize);
-                    using (Brush b = new SolidBrush(minusPressed ? Color.Gold : btnBaseColor))
+                    Color minusColor;
+                    if (minusPressed)
+                    {
+                        minusColor = Color.Gold;
+                    }
+                    else
+                    {
+                        minusColor = btnBaseColor;
+                    }
+                    using (Brush b = new SolidBrush(minusColor))
                     {
                         g.FillEllipse(b, mRect);
                         g.DrawEllipse(btnOutline, mRect);
@@ -817,7 +1294,16 @@ public class TuioDemo : Form, TuioListener
                     using (Brush cBrush = new SolidBrush(btnBaseColor))
                     {
                         g.FillPath(cBrush, RoundedRect(cartRect, 15));
-                        using (Pen pen = new Pen(dark ? Color.White : Color.Black, 1))
+                        Color penColor;
+                        if (dark)
+                        {
+                            penColor = Color.White;
+                        }
+                        else
+                        {
+                            penColor = Color.Black;
+                        }
+                        using (Pen pen = new Pen(penColor, 1))
                             g.DrawPath(pen, RoundedRect(cartRect, 15));
 
                         string txt = "ADD TO CART";
@@ -839,8 +1325,26 @@ public class TuioDemo : Form, TuioListener
                 bool backActive = objectList.ContainsKey(10);
 
                 // Use the theme colors you already defined in the function
-                using (Brush b = new SolidBrush(backActive ? Color.Gold : btnBaseColor))
-                using (Pen p = new Pen(dark ? Color.White : Color.Black, 2))
+                Color backBtnColor;
+                if (backActive)
+                {
+                    backBtnColor = Color.Gold;
+                }
+                else
+                {
+                    backBtnColor = btnBaseColor;
+                }
+                Color backPenColor;
+                if (dark)
+                {
+                    backPenColor = Color.White;
+                }
+                else
+                {
+                    backPenColor = Color.Black;
+                }
+                using (Brush b = new SolidBrush(backBtnColor))
+                using (Pen p = new Pen(backPenColor, 2))
                 {
                     // Draw Shadow (to match the Add to Cart button style)
                     g.FillEllipse(new SolidBrush(shadowColor), backRect.X, backRect.Y + 4, backBtnSize, backBtnSize);
@@ -867,7 +1371,7 @@ public class TuioDemo : Form, TuioListener
             DrawBestsellersScreen();
         }
 
-        // Draws The Deals Screen
+        /// Draws The Deals Screen
         void DrawDealsScreen()
         {
             try
@@ -906,14 +1410,32 @@ public class TuioDemo : Form, TuioListener
                 float baseY = ch * 0.30f;
 
                 // 4. Colors & Styling
-                Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
-                Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
-                Color barColor = dark ? Color.FromArgb(55, 55, 55) : Color.FromArgb(220, 200, 150);
-                Color btnBaseColor = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
-                Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40);
-                Color discountBadgeColor = Color.FromArgb(220, 53, 69); // Bright Red
+                Color cardColor;
+                Color shadowColor;
+                Color barColor;
+                Color btnBaseColor;
+                Color selectionColor;
+                Brush textBrush;
+                if (dark)
+                {
+                    cardColor = Color.FromArgb(130, 130, 130);
+                    shadowColor = Color.FromArgb(70, 70, 70);
+                    barColor = Color.FromArgb(55, 55, 55);
+                    btnBaseColor = Color.FromArgb(70, 90, 120);
+                    selectionColor = Color.White;
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    cardColor = Color.FromArgb(235, 215, 160);
+                    shadowColor = Color.FromArgb(180, 160, 110);
+                    barColor = Color.FromArgb(220, 200, 150);
+                    btnBaseColor = Color.FromArgb(255, 190, 100);
+                    selectionColor = Color.FromArgb(100, 70, 40);
+                    textBrush = Brushes.Black;
+                }
+                Color discountBadgeColor = Color.FromArgb(220, 53, 69);
 
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
                 Pen btnOutline = new Pen(Color.Black, 2);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -928,8 +1450,18 @@ public class TuioDemo : Form, TuioListener
                     bool isSelected = (hoodieColor == currentItemName);
 
                     float x = startX + i * (cardWidth + spacing);
-                    float y = isSelected ? baseY - 15 : baseY;
-                    float shadowOffset = isSelected ? 15 : 10;
+                    float y;
+                    float shadowOffset;
+                    if (isSelected)
+                    {
+                        y = baseY - 15;
+                        shadowOffset = 15;
+                    }
+                    else
+                    {
+                        y = baseY;
+                        shadowOffset = 10;
+                    }
 
                     RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
                     RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
@@ -950,7 +1482,19 @@ public class TuioDemo : Form, TuioListener
                     using (GraphicsPath path = RoundedRect(rect, 25))
                     {
                         g.FillPath(new SolidBrush(cardColor), path);
-                        using (Pen p = new Pen(isSelected ? selectionColor : Color.White, isSelected ? 3 : 1))
+                        Color penColor;
+                        int penWidth;
+                        if (isSelected)
+                        {
+                            penColor = selectionColor;
+                            penWidth = 3;
+                        }
+                        else
+                        {
+                            penColor = Color.White;
+                            penWidth = 1;
+                        }
+                        using (Pen p = new Pen(penColor, penWidth))
                             g.DrawPath(p, path);
                     }
 
@@ -986,7 +1530,16 @@ public class TuioDemo : Form, TuioListener
 
                     // Plus Button UI
                     RectangleF pRect = new RectangleF(x, controlY, btnSize, btnSize);
-                    using (Brush b = new SolidBrush(plusActive ? Color.Gold : btnBaseColor))
+                    Color plusColor;
+                    if (plusActive)
+                    {
+                        plusColor = Color.Gold;
+                    }
+                    else
+                    {
+                        plusColor = btnBaseColor;
+                    }
+                    using (Brush b = new SolidBrush(plusColor))
                     {
                         g.FillEllipse(b, pRect);
                         g.DrawEllipse(btnOutline, pRect);
@@ -996,7 +1549,16 @@ public class TuioDemo : Form, TuioListener
                     // Minus Button UI
                     float mX = x + cardWidth - btnSize;
                     RectangleF mRect = new RectangleF(mX, controlY, btnSize, btnSize);
-                    using (Brush b = new SolidBrush(minusActive ? Color.Gold : btnBaseColor))
+                    Color minusColor;
+                    if (minusActive)
+                    {
+                        minusColor = Color.Gold;
+                    }
+                    else
+                    {
+                        minusColor = btnBaseColor;
+                    }
+                    using (Brush b = new SolidBrush(minusColor))
                     {
                         g.FillEllipse(b, mRect);
                         g.DrawEllipse(btnOutline, mRect);
@@ -1041,8 +1603,26 @@ public class TuioDemo : Form, TuioListener
                 bool backActive = objectList.ContainsKey(10);
 
                 // Use the theme colors you already defined in the function
-                using (Brush b = new SolidBrush(backActive ? Color.Gold : btnBaseColor))
-                using (Pen p = new Pen(dark ? Color.White : Color.Black, 2))
+                Color backBtnColor;
+                if (backActive)
+                {
+                    backBtnColor = Color.Gold;
+                }
+                else
+                {
+                    backBtnColor = btnBaseColor;
+                }
+                Color backPenColor;
+                if (dark)
+                {
+                    backPenColor = Color.White;
+                }
+                else
+                {
+                    backPenColor = Color.Black;
+                }
+                using (Brush b = new SolidBrush(backBtnColor))
+                using (Pen p = new Pen(backPenColor, 2))
                 {
                     // Draw Shadow (to match the Add to Cart button style)
                     g.FillEllipse(new SolidBrush(shadowColor), backRect.X, backRect.Y + 4, backBtnSize, backBtnSize);
@@ -1070,13 +1650,17 @@ public class TuioDemo : Form, TuioListener
         }
 
 
-        // Draws The Outfit Builder Screen
-        // Draws The Outfit Builder Screen
+        /// Draws The Outfit Builder Screen
         void DrawOutfitBuilderScreen()
         {
             try
             {
-                // 1. Background & Logo
+                // 1. Setup Canvas and Theme
+                float cw = ClientSize.Width;
+                float ch = ClientSize.Height;
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                // Background & Logo
                 using (Bitmap bg = new Bitmap(Path.Combine(themePath, "Background.png")))
                 {
                     Bitmap tempBg = bg; ResizeImage(ref tempBg); g.DrawImage(tempBg, 0, 0);
@@ -1088,289 +1672,195 @@ public class TuioDemo : Form, TuioListener
                 }
                 catch { }
 
-                float cw = ClientSize.Width;
-                float ch = ClientSize.Height;
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-
-                // Theme Colors
-                Color cardCol = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
-                Color shadowCol = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
+                // Dynamic Theme Colors
+                Color cardCol = dark ? Color.FromArgb(100, 100, 100) : Color.FromArgb(235, 215, 160);
+                Color shadowCol = dark ? Color.FromArgb(40, 40, 40) : Color.FromArgb(180, 160, 110);
                 Color btnCol = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
                 Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40);
-                Color barColor = dark ? Color.FromArgb(55, 55, 55) : Color.FromArgb(220, 200, 150);
+                Color barColor = dark ? Color.FromArgb(60, 60, 60) : Color.FromArgb(220, 200, 150);
+                Color menuSliceColor = dark ? Color.FromArgb(80, 80, 80) : Color.FromArgb(245, 225, 175);
+                Color menuSliceSelectedColor = dark ? Color.FromArgb(40, 40, 40) : Color.FromArgb(200, 160, 100);
+                Color menuSliceHoverColor = dark ? Color.FromArgb(150, 150, 150) : Color.FromArgb(255, 240, 200);
+
+                // FIXED: Use this brush for ALL text to prevent disappearing in Dark Mode
                 Brush textBrush = dark ? Brushes.White : Brushes.Black;
-                Pen btnOutline = new Pen(Color.Black, 2);
+                Pen borderPen = new Pen(dark ? Color.Gray : Color.White, 2);
                 Pen selectionPen = new Pen(selectionColor, 3);
 
-                // === LEFT PART: HUGE OUTFIT CARD (2/3 of screen) ===
+                // === LEFT PART: HUGE OUTFIT CARD (PREVIEW) ===
                 float leftWidth = cw * 0.65f;
                 float previewCardW = leftWidth * 0.75f;
                 float previewCardH = ch * 0.55f;
-                float previewCardX = (leftWidth - previewCardW) / 2 + 50;
-                float previewCardY = 100;
-                RectangleF previewRect = new RectangleF(previewCardX, previewCardY, previewCardW, previewCardH);
+                float previewCardX = (leftWidth - previewCardW) / 2 + 45;
+                float previewRectY = 80;
+                RectangleF previewRect = new RectangleF(previewCardX, previewRectY, previewCardW, previewCardH);
 
-                // Shadow
                 g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(previewRect.X + 12, previewRect.Y + 12, previewRect.Width, previewRect.Height), 40));
-
-                // Main Card
                 g.FillPath(new SolidBrush(cardCol), RoundedRect(previewRect, 40));
-                g.DrawPath(new Pen(Color.White, 2), RoundedRect(previewRect, 40));
+                g.DrawPath(borderPen, RoundedRect(previewRect, 40));
 
-                // Draw TOP (Shirt/Hoodie/Jacket)
+                // Draw Outfit Layers
                 if (!string.IsNullOrEmpty(currentTop))
                 {
-                    try
-                    {
-                        string topPath = Path.Combine(themePath, currentTop + ".png");
-                        if (File.Exists(topPath))
-                        {
-                            using (Bitmap img = new Bitmap(topPath))
-                                g.DrawImage(img, previewRect.X + 50, previewRect.Y - 10, previewRect.Width - 100, previewRect.Height * 0.70f);
-                        }
-                    }
-                    catch { }
-                    g.DrawString($"Top: {currentTop}", new Font("Segoe UI", 10, FontStyle.Bold), textBrush, previewRect.X + 15, previewRect.Y + 10);
+                    string path = Path.Combine(themePath, currentTop + ".png");
+                    if (File.Exists(path)) using (Bitmap img = new Bitmap(path))
+                            g.DrawImage(img, previewRect.X + 50, previewRect.Y - 10, previewRect.Width - 100, previewRect.Height * 0.70f);
                 }
-
-                // Draw BOTTOM (Pants/Shorts)
                 if (!string.IsNullOrEmpty(currentBottom))
                 {
-                    try
-                    {
-                        string bottomPath = Path.Combine(themePath, currentBottom + ".png");
-                        if (File.Exists(bottomPath))
-                        {
-                            using (Bitmap img = new Bitmap(bottomPath))
-                                g.DrawImage(img, previewRect.X + 80, previewRect.Y - 10 + (previewRect.Height * 0.38f), previewRect.Width - 160, previewRect.Height * 0.70f);
-                        }
-                    }
-                    catch { }
-                    g.DrawString($"Bottom: {currentBottom}", new Font("Segoe UI", 10, FontStyle.Bold), textBrush, previewRect.X + 15, previewRect.Bottom - 30);
+                    string path = Path.Combine(themePath, currentBottom + ".png");
+                    if (File.Exists(path)) using (Bitmap img = new Bitmap(path))
+                            g.DrawImage(img, previewRect.X + 80, previewRect.Y - 10 + (previewRect.Height * 0.38f), previewRect.Width - 160, previewRect.Height * 0.70f);
                 }
 
                 // === ADD TO CART BUTTON (ID 5) ===
                 bool addCartActive = HasObjectWithSymbolID(5);
-                float addBtnW = 200f;
-                float addBtnH = 55f;
-                RectangleF addCartRect = new RectangleF(previewRect.X + 250 + (previewRect.Width - addBtnW) / 2, previewRect.Bottom + 20, addBtnW, addBtnH);
+                // Corrected X offset logic to stay relative to previewRect
+                RectangleF addCartRect = new RectangleF(previewRect.X + (previewRect.Width - 200) / 2 + 250, previewRect.Bottom + 20, 200, 55);
 
                 g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(addCartRect.X, addCartRect.Y + 5, addCartRect.Width, addCartRect.Height), 20));
-                g.FillPath(new SolidBrush(addCartActive ? btnCol : btnCol), RoundedRect(addCartRect, 20));
+                g.FillPath(new SolidBrush(addCartActive ? Color.Gold : btnCol), RoundedRect(addCartRect, 20));
                 g.DrawPath(new Pen(dark ? Color.White : Color.Black, 2), RoundedRect(addCartRect, 20));
 
                 using (Font btnFont = new Font("Segoe UI", 13, FontStyle.Bold))
                 {
-                    string btnTxt = "ADD TO CART";
-                    SizeF btnSz = g.MeasureString(btnTxt, btnFont);
-                    g.DrawString(btnTxt, btnFont, Brushes.Black, addCartRect.X + (addCartRect.Width - btnSz.Width) / 2, addCartRect.Y + (addCartRect.Height - btnSz.Height) / 2);
+                    string txt = "ADD TO CART";
+                    SizeF sz = g.MeasureString(txt, btnFont);
+                    // FIXED: Using textBrush instead of Brushes.Black
+                    g.DrawString(txt, btnFont, textBrush, addCartRect.X + (addCartRect.Width - sz.Width) / 2, addCartRect.Y + (addCartRect.Height - sz.Height) / 2);
                 }
 
-                // === CART PREVIEW (Bottom Left - Like Checkout Page) ===
-                // Only show cart when there are items in it
-                int totalCartItems = 0;
+                // === CART PREVIEW (BOTTOM LEFT) ===
                 List<string> cartItemsList = new List<string>();
-                foreach (var entry in cart)
-                {
-                    if (entry.Value > 0)
-                    {
-                        totalCartItems += entry.Value;
-                        cartItemsList.Add(entry.Key);
-                    }
-                }
-
-                // Auto-select first item in cart if hoodieColor is empty or not in cart
-                if (cartItemsList.Count > 0)
-                {
-                    if (string.IsNullOrEmpty(hoodieColor) || !cartItemsList.Contains(hoodieColor))
-                    {
-                        hoodieColor = cartItemsList[0];
-                    }
-                }
+                foreach (var entry in cart) if (entry.Value > 0) cartItemsList.Add(entry.Key);
 
                 if (cartItemsList.Count > 0)
                 {
-                    float cartPreviewX = 30;
-                    float cartPreviewY = ch - 320;
-                    float cartPreviewW = leftWidth * 0.60f;
-                    float cartPreviewH = 300;
+                    float cpX = 30, cpY = ch - 320, cpW = leftWidth * 0.65f, cpH = 300;
+                    RectangleF cpRect = new RectangleF(cpX, cpY, cpW, cpH);
+                    g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(cpX + 8, cpY + 8, cpW, cpH), 25));
+                    g.FillPath(new SolidBrush(cardCol), RoundedRect(cpRect, 25));
+                    g.DrawString($"Cart Preview ({cartItemsList.Count})", new Font("Segoe UI", 16, FontStyle.Bold), textBrush, cpX + 20, cpY + 12);
 
-                    RectangleF cartPreviewRect = new RectangleF(cartPreviewX, cartPreviewY, cartPreviewW, cartPreviewH);
-                    g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(cartPreviewX + 8, cartPreviewY + 8, cartPreviewW, cartPreviewH), 25));
-                    g.FillPath(new SolidBrush(cardCol), RoundedRect(cartPreviewRect, 25));
-                    g.DrawPath(new Pen(Color.White, 2), RoundedRect(cartPreviewRect, 25));
-
-                    // Cart Title with item count
-                    g.DrawString($"Cart ({cartItemsList.Count} items)", new Font("Segoe UI", 16, FontStyle.Bold), textBrush, cartPreviewX + 20, cartPreviewY + 12);
-
-                    // Scroll arrows if more than 4 items
-                    if (cartItemsList.Count > 4)
+                    float itemY = cpY + 55;
+                    using (Font itemFont = new Font("Segoe UI", 10, FontStyle.Bold))
+                    using (Font symbolFont = new Font("Arial", 14, FontStyle.Bold))
                     {
-                        g.DrawString("▲", new Font("Arial", 14, FontStyle.Bold),
-                            new SolidBrush(cartScrollIndex > 0 ? selectionColor : Color.Gray),
-                            cartPreviewX + cartPreviewW - 35, cartPreviewY + 10);
-                        g.DrawString("▼", new Font("Arial", 14, FontStyle.Bold),
-                            new SolidBrush(cartScrollIndex < cartItemsList.Count - 4 ? selectionColor : Color.Gray),
-                            cartPreviewX + cartPreviewW - 35, cartPreviewRect.Bottom - 45);
-                    }
-
-                    float itemY = cartPreviewY + 45;
-                    int displayCount = 0;
-                    int maxDisplay = 4;
-
-                    // Ensure scroll index is valid
-                    if (cartScrollIndex >= cartItemsList.Count) cartScrollIndex = 0;
-                    if (cartScrollIndex < 0) cartScrollIndex = 0;
-
-                    using (Font itemFont = new Font("Segoe UI", 11, FontStyle.Bold))
-                    using (Font symbolFont = new Font("Arial", 16, FontStyle.Bold))
-                    {
-                        // Display items starting from cartScrollIndex
-                        for (int idx = cartScrollIndex; idx < cartItemsList.Count && displayCount < maxDisplay; idx++)
+                        for (int i = cartScrollIndex; i < cartItemsList.Count && i < cartScrollIndex + 4; i++)
                         {
-                            string itemName = cartItemsList[idx];
-                            int qty = cart[itemName];
-                            bool isSelectedItem = (hoodieColor == itemName);
+                            string name = cartItemsList[i];
+                            int qty = cart[name];
+                            bool isSelected = (hoodieColor == name);
 
-                            // Selection highlight - ALWAYS show on selected item
-                            if (isSelectedItem)
-                            {
-                                RectangleF selRect = new RectangleF(cartPreviewX + 10, itemY - 3, cartPreviewW - 20, 48);
-                                g.DrawPath(selectionPen, RoundedRect(selRect, 12));
-                            }
+                            if (isSelected) g.DrawPath(selectionPen, RoundedRect(new RectangleF(cpX + 10, itemY - 5, cpW - 20, 50), 12));
 
-                            // Item thumbnail
+                            // 1. Item Image
                             try
                             {
-                                using (Bitmap itemImg = new Bitmap(Path.Combine(themePath, itemName + ".png")))
-                                    g.DrawImage(itemImg, cartPreviewX + 18, itemY + 2, 38, 38);
+                                string itemPath = Path.Combine(themePath, name + ".png");
+                                if (File.Exists(itemPath)) using (Bitmap img = new Bitmap(itemPath))
+                                        g.DrawImage(img, cpX + 20, itemY, 40, 40);
                             }
                             catch { }
 
-                            // Item name
-                            g.DrawString(itemName, itemFont, textBrush, cartPreviewX + 65, itemY + 10);
+                            // 2. Item Name
+                            g.DrawString(name, itemFont, textBrush, cpX + 70, itemY + 10);
 
-                            // Quantity Pill
-                            float pillX = cartPreviewX + cartPreviewW - 150;
-                            RectangleF pillRect = new RectangleF(pillX, itemY + 5, 95, 32);
-                            g.FillPath(new SolidBrush(barColor), RoundedRect(pillRect, 16));
+                            // 3. Quantity Pill
+                            float pillX = cpX + cpW - 160;
+                            RectangleF pillRect = new RectangleF(pillX, itemY + 5, 90, 30);
+                            g.FillPath(new SolidBrush(barColor), RoundedRect(pillRect, 15));
+                            g.DrawString("-", symbolFont, textBrush, pillX + 10, itemY + 8);
+                            g.DrawString(qty.ToString(), itemFont, textBrush, pillX + 40, itemY + 11);
+                            g.DrawString("+", symbolFont, textBrush, pillX + 68, itemY + 8);
 
-                            // Minus button
-                            g.DrawString("-", symbolFont, textBrush, pillX + 8, itemY + 6);
-
-                            // Quantity number
-                            string qtyStr = qty.ToString();
-                            SizeF qtySize = g.MeasureString(qtyStr, itemFont);
-                            g.DrawString(qtyStr, itemFont, textBrush, pillX + 47 - qtySize.Width / 2, itemY + 10);
-
-                            // Plus button
-                            g.DrawString("+", symbolFont, textBrush, pillX + 70, itemY + 6);
-
-                            // Delete button
+                            // 4. Delete Icon
                             try
                             {
-                                using (Bitmap delImg = new Bitmap(Path.Combine(themePath, "Delete.png")))
-                                    g.DrawImage(delImg, pillX + 100, itemY + 5, 28, 28);
+                                string delPath = Path.Combine(themePath, "Delete.png");
+                                if (File.Exists(delPath)) using (Bitmap delImg = new Bitmap(delPath))
+                                        g.DrawImage(delImg, pillX + 100, itemY + 5, 30, 30);
                             }
-                            catch { }
+                            catch { g.DrawString("X", itemFont, Brushes.Red, pillX + 105, itemY + 10); }
 
-                            itemY += 52;
-                            displayCount++;
+                            itemY += 55;
                         }
                     }
-
-                    // Instructions at bottom
-                    g.DrawString("ID 2: select | ID 3/4: qty | ID 16: delete | Rotate ID 2: scroll", new Font("Segoe UI", 8), textBrush, cartPreviewX + 10, cartPreviewRect.Bottom - 22);
                 }
 
-                // === RIGHT PART: CATEGORY CARDS ===
-                float rightX = leftWidth + 15;
-                float catW = cw * 0.30f;
-                float catH = ch * 0.14f;
-                float spacing = 12;
-                int[] scrollerIDs = { 11, 12, 13, 14, 15 };
+                // === RIGHT PART: CATEGORY CARD ===
                 string[] catNames = { "Shirts", "Hoodies", "Jackets", "Pants", "Shorts" };
-                float y = 20;
-                for (int i = 0; i < 5; i++)
+                string[] catIcons = { "Shirt.png", "Hoodie.png", "Jacket.png", "Pants.png", "Shorts.png" };
+
+                if (selectedMenuCategory >= 0 && selectedMenuCategory < 5)
                 {
-                    if (i == 0)
+                    int catIdx = selectedMenuCategory;
+                    float cardSize = Math.Min(cw - leftWidth - 80, ch * 0.45f);
+                    float catCardX = leftWidth + ((cw - leftWidth) / 2) - (cardSize / 2) - 70;
+                    RectangleF catRect = new RectangleF(catCardX, 80, cardSize, cardSize);
+
+                    bool isScrolling = HasObjectWithSymbolID(11);
+                    int itemIdx = Math.Abs(scrollIndices[catIdx]) % items[catIdx].Length;
+                    string displayedItem = items[catIdx][itemIdx];
+
+                    g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(catRect.X + 12, catRect.Y + 12, cardSize, cardSize), 25));
+                    g.FillPath(new SolidBrush(isScrolling ? (dark ? Color.FromArgb(120, 110, 80) : Color.FromArgb(255, 245, 200)) : cardCol), RoundedRect(catRect, 25));
+
+                    if (isScrolling) g.DrawPath(new Pen(selectionColor, 5), RoundedRect(new RectangleF(catRect.X - 5, catRect.Y - 5, cardSize + 10, cardSize + 10), 30));
+
+                    using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
                     {
-                        y += 80 + i * (catH + spacing);
-                    }
-                    else
-                    {
-                        y = 100 + i * (catH + spacing);
-                    }
-                    bool isScrolling = HasObjectWithSymbolID(scrollerIDs[i]);
-
-                    int itemIdx = Math.Abs(scrollIndices[i]) % items[i].Length;
-                    string displayedItem = items[i][itemIdx];
-
-                    bool isWorn = (currentTop == displayedItem || currentBottom == displayedItem);
-                    bool isSelected = isScrolling;
-
-                    float cardY = isSelected ? y - 10 : y;
-                    float shadowOffset = isSelected ? 14 : 8;
-
-                    RectangleF catRect = new RectangleF(rightX, cardY, catW, catH);
-                    RectangleF shadowRect = new RectangleF(rightX + shadowOffset, cardY + shadowOffset, catW, catH);
-
-                    // Shadow
-                    g.FillPath(new SolidBrush(shadowCol), RoundedRect(shadowRect, 20));
-
-                    // Selection Border (like home page)
-                    if (isSelected)
-                    {
-                        RectangleF borderRect = new RectangleF(rightX - 6, cardY - 6, catW + 12, catH + 12);
-                        g.DrawPath(new Pen(selectionColor, 5), RoundedRect(borderRect, 26));
+                        g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), catRect.X - 45, catRect.Y + (cardSize / 2) - 20);
+                        g.DrawString("►", arrowFont, new SolidBrush(selectionColor), catRect.Right + 10, catRect.Y + (cardSize / 2) - 20);
                     }
 
-                    // Worn indicator (gold border)
-                    if (isWorn)
-                    {
-                        g.DrawPath(new Pen(Color.Gold, 4), RoundedRect(catRect, 20));
-                    }
-
-                    // Main Card
-                    Color cardFill = isScrolling ? Color.FromArgb(255, 235, 180) : cardCol;
-                    g.FillPath(new SolidBrush(cardFill), RoundedRect(catRect, 20));
-                    g.DrawPath(new Pen(isSelected ? selectionColor : Color.White, isSelected ? 2 : 1), RoundedRect(catRect, 20));
-
-                    // Category Label
-                    g.DrawString(catNames[i], new Font("Segoe UI", 12, FontStyle.Bold), textBrush, rightX + 12, cardY + 10);
-
-                    // Item Image
+                    g.DrawString(catNames[catIdx], new Font("Segoe UI", 16, FontStyle.Bold), textBrush, catRect.X + 20, catRect.Y + 20);
                     try
                     {
                         using (Bitmap img = new Bitmap(Path.Combine(themePath, displayedItem + ".png")))
-                            g.DrawImage(img, rightX + catW - catH - 5, cardY + 8, catH - 16, catH - 16);
+                            g.DrawImage(img, catRect.X + 40, catRect.Y + 60, cardSize - 80, cardSize - 120);
                     }
                     catch { }
-
-                    // Item Name
-                    g.DrawString(displayedItem, new Font("Segoe UI", 10), textBrush, rightX + 12, cardY + catH - 28);
-
+                    g.DrawString(displayedItem, new Font("Segoe UI", 12, FontStyle.Bold), textBrush, catRect.X + 20, catRect.Bottom - 40);
                 }
 
-                // === BACK BUTTON (ID 10) ===
-                float backBtnSize = 60f;
-                float margin = 25f;
-                RectangleF backRect = new RectangleF(cw - backBtnSize - margin, margin, backBtnSize, backBtnSize);
-                bool backActive = HasObjectWithSymbolID(10);
+                // === CIRCULAR PIE MENU ===
+                float menuRadius = 130f, menuCenterX = cw - 330, menuCenterY = ch - 220, innerRadius = 45f;
+                float sliceAngle = 360f / 5, startAngle = -90 - sliceAngle / 2;
 
-                g.FillEllipse(new SolidBrush(shadowCol), backRect.X, backRect.Y + 4, backBtnSize, backBtnSize);
+                for (int i = 0; i < 5; i++)
+                {
+                    float currAngle = startAngle + i * sliceAngle;
+                    bool isHovered = (menuHoverIndex == i), isSelected = (selectedMenuCategory == i);
+                    Color sliceColor = isSelected ? menuSliceSelectedColor : (isHovered ? menuSliceHoverColor : menuSliceColor);
+
+                    using (GraphicsPath slicePath = new GraphicsPath())
+                    {
+                        slicePath.AddArc(menuCenterX - menuRadius, menuCenterY - menuRadius, menuRadius * 2, menuRadius * 2, currAngle, sliceAngle);
+                        slicePath.AddArc(menuCenterX - innerRadius, menuCenterY - innerRadius, innerRadius * 2, innerRadius * 2, currAngle + sliceAngle, -sliceAngle);
+                        slicePath.CloseFigure();
+                        g.FillPath(new SolidBrush(sliceColor), slicePath);
+                        g.DrawPath(new Pen(isHovered ? selectionColor : (dark ? Color.Gray : Color.White), isHovered ? 4 : 1), slicePath);
+                    }
+                    float iconA = (currAngle + sliceAngle / 2) * (float)Math.PI / 180f;
+                    float ix = menuCenterX + (float)Math.Cos(iconA) * (menuRadius + innerRadius) / 2 - 20;
+                    float iy = menuCenterY + (float)Math.Sin(iconA) * (menuRadius + innerRadius) / 2 - 20;
+                    try { using (Bitmap icon = new Bitmap(Path.Combine(themePath, catIcons[i]))) g.DrawImage(icon, ix, iy, 40, 40); } catch { }
+                }
+
+                g.FillEllipse(new SolidBrush(cardCol), menuCenterX - innerRadius, menuCenterY - innerRadius, innerRadius * 2, innerRadius * 2);
+                try { using (Bitmap mIcon = new Bitmap(Path.Combine(themePath, "Menu.png"))) g.DrawImage(mIcon, menuCenterX - 25, menuCenterY - 25, 50, 50); } catch { }
+
+                // === BACK BUTTON ===
+                RectangleF backRect = new RectangleF(cw - 85, 25, 60, 60);
+                bool backActive = HasObjectWithSymbolID(10);
+                g.FillEllipse(new SolidBrush(shadowCol), backRect.X, backRect.Y + 4, 60, 60);
                 g.FillEllipse(new SolidBrush(backActive ? Color.Gold : btnCol), backRect);
                 g.DrawEllipse(new Pen(dark ? Color.White : Color.Black, 2), backRect);
-
-                using (Font backFont = new Font("Segoe UI", 11, FontStyle.Bold))
-                {
-                    string backTxt = "BACK";
-                    SizeF backSz = g.MeasureString(backTxt, backFont);
-                    g.DrawString(backTxt, backFont, textBrush, backRect.X + (backBtnSize - backSz.Width) / 2 + 2, backRect.Y + (backBtnSize - backSz.Height) / 2);
-                }
+                g.DrawString("BACK", new Font("Segoe UI", 10, FontStyle.Bold), textBrush, backRect.X + 8, backRect.Y + 20);
 
             }
-            catch (Exception ex) { Console.WriteLine("OutfitBuilder Error: " + ex.Message); }
+            catch (Exception ex) { Console.WriteLine("Builder Error: " + ex.Message); }
         }
         if (outfitbuilder == true)
         {
@@ -1406,11 +1896,28 @@ public class TuioDemo : Form, TuioListener
                 float cardY = (ch - cardH) / 2 + 40;
 
                 // Theme Colors
-                Color cardCol = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
-                Color shadowCol = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
-                Color btnCol = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
-                Pen selectionPen = new Pen(dark ? Color.White : Color.SaddleBrown, 3);
+                Color cardCol;
+                Color shadowCol;
+                Color btnCol;
+                Brush textBrush;
+                Color selectionPenColor;
+                if (dark)
+                {
+                    cardCol = Color.FromArgb(130, 130, 130);
+                    shadowCol = Color.FromArgb(70, 70, 70);
+                    btnCol = Color.FromArgb(70, 90, 120);
+                    textBrush = Brushes.White;
+                    selectionPenColor = Color.White;
+                }
+                else
+                {
+                    cardCol = Color.FromArgb(235, 215, 160);
+                    shadowCol = Color.FromArgb(180, 160, 110);
+                    btnCol = Color.FromArgb(255, 190, 100);
+                    textBrush = Brushes.Black;
+                    selectionPenColor = Color.SaddleBrown;
+                }
+                Pen selectionPen = new Pen(selectionPenColor, 3);
 
                 g.SmoothingMode = SmoothingMode.AntiAlias;
 
@@ -1531,7 +2038,7 @@ public class TuioDemo : Form, TuioListener
                         double tax = subtotal * 0.14;
                         double totalVal = subtotal + service + tax;
 
-                        string[,] summary = { { "Subtotal", $"{subtotal:F2}$" }, { "Service (12%)", $"{service:F2}$" }, { "TAX (14%)", $"{tax:F2}$" } };
+                        string[,] summary = { { "Subtotal", subtotal.ToString("F2") + "$" }, { "Service (12%)", service.ToString("F2") + "$" }, { "TAX (14%)", tax.ToString("F2") + "$" } };
                         for (int i = 0; i < 3; i++)
                         {
                             g.DrawString(summary[i, 0], itemFont, textBrush, cardX + 50, itemY + (i * 25));
@@ -1542,7 +2049,7 @@ public class TuioDemo : Form, TuioListener
                         float footerY = cardY + cardH - 95;
                         g.DrawLine(new Pen(textBrush, 2), cardX + 50, footerY - 10, cardX + cardW - 50, footerY - 10);
                         g.DrawString("Total Payment", itemFont, textBrush, cardX + 50, footerY + 15);
-                        g.DrawString($"{totalVal:F2}$", titleFont, textBrush, cardX + 185, footerY + 5);
+                        g.DrawString(totalVal.ToString("F2") + "$", titleFont, textBrush, cardX + 185, footerY + 5);
 
                         // Checkout Button
                         float btnW = 160; float btnH = 55;
@@ -1554,7 +2061,16 @@ public class TuioDemo : Form, TuioListener
                         g.DrawPath(new Pen(Color.Black, 2), RoundedRect(btnRect, 15));
                         string checkTxt = "CHECKOUT";
                         SizeF sSize = g.MeasureString(checkTxt, itemFont);
-                        g.DrawString(checkTxt, itemFont, dark ? Brushes.White : Brushes.Black, btnX + (btnW - sSize.Width) / 2, footerY + 5 + (btnH - sSize.Height) / 2);
+                        Brush checkoutTextBrush;
+                        if (dark)
+                        {
+                            checkoutTextBrush = Brushes.White;
+                        }
+                        else
+                        {
+                            checkoutTextBrush = Brushes.Black;
+                        }
+                        g.DrawString(checkTxt, itemFont, checkoutTextBrush, btnX + (btnW - sSize.Width) / 2, footerY + 5 + (btnH - sSize.Height) / 2);
                     }
                 }
             }
@@ -1565,6 +2081,7 @@ public class TuioDemo : Form, TuioListener
             DrawCheckoutScreen();
         }
 
+        /// Draws The Thank You Screen
         void DrawThankYouScreen()
         {
             Bitmap img = new Bitmap(Path.Combine(themePath, "ThankYou.png"));
@@ -1680,8 +2197,8 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
-                    // === CHECKOUT DELETE ITEM (ID 16) ===
-                    if (tobj.SymbolID == 16 && checkout)
+                    // === CHECKOUT DELETE ITEM (ID 12) ===
+                    if (tobj.SymbolID == 12 && checkout)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalMilliseconds > 500)
                         {
@@ -1819,83 +2336,36 @@ public class TuioDemo : Form, TuioListener
                             checkout = true;
                         }
                     }
-                    int[] scrollerIDs = { 11, 12, 13, 14, 15 };
-                    // === OUTFIT BUILDER SCROLLING (IDs 11-15) ===
+                    // === OUTFIT BUILDER SCROLLING (ID 11 for all categories) ===
                     // ========== OUTFIT BUILDER COMPLETE LOGIC ==========
                     if (outfitbuilder)
                     {
-
-                        // --- SCROLLING LOGIC (IDs 11-15) ---
-                        for (int i = 0; i < scrollerIDs.Length; i++)
+                        // --- SCROLLING LOGIC using ID 11 for the selected category ---
+                        if (selectedMenuCategory >= 0 && selectedMenuCategory < 5)
                         {
-                            if (tobj.SymbolID == scrollerIDs[i])
+                            int catIdx = selectedMenuCategory;
+
+                            if (tobj.SymbolID == catIdx)
                             {
                                 if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 350)
                                 {
-                                    int oldIdx = scrollIndices[i];
+                                    int oldIdx = scrollIndices[catIdx];
 
                                     // Rotate Right
                                     if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120)
                                     {
-                                        scrollIndices[i] = (scrollIndices[i] + 1) % items[i].Length;
+                                        scrollIndices[catIdx] = (scrollIndices[catIdx] + 1) % items[catIdx].Length;
                                     }
                                     // Rotate Left
                                     else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340)
                                     {
-                                        scrollIndices[i] = (scrollIndices[i] - 1 + items[i].Length) % items[i].Length;
+                                        scrollIndices[catIdx] = (scrollIndices[catIdx] - 1 + items[catIdx].Length) % items[catIdx].Length;
                                     }
 
-                                    if (oldIdx != scrollIndices[i])
+                                    if (oldIdx != scrollIndices[catIdx])
                                     {
-                                        // Update hoodieColor to current scrolled item
-                                        hoodieColor = items[i][scrollIndices[i]];
+                                        hoodieColor = items[catIdx][scrollIndices[catIdx]];
                                         lastScrollTime = DateTime.Now;
-                                    }
-                                }
-                            }
-                        }
-
-                        // --- SELECTION LOGIC (ID 8) - THIS IS THE KEY FIX ---
-                        //if (tobj.SymbolID == 8)
-                        {
-                            if ((DateTime.Now - lastOutfitSelectTime).TotalMilliseconds > 600)
-                            {
-                                // Check each scroller to see which category is active
-                                for (int i = 0; i < scrollerIDs.Length; i++)
-                                {
-                                    // Check if this scroller ID is currently on the table
-                                    bool scrollerPresent = false;
-                                    foreach (TuioObject checkObj in objectList.Values)
-                                    {
-                                        if (checkObj.SymbolID == scrollerIDs[i])
-                                        {
-                                            scrollerPresent = true;
-                                            break;
-                                        }
-                                    }
-
-                                    if (scrollerPresent)
-                                    {
-                                        // Get the item at the current scroll index
-                                        int itemIdx = Math.Abs(scrollIndices[i]) % items[i].Length;
-                                        string selectedItem = items[i][itemIdx];
-
-                                        // TOPS: Shirts (0), Hoodies (1), Jackets (2)
-                                        if (i <= 2)
-                                        {
-                                            currentTop = selectedItem;
-                                            Console.WriteLine($"TOP changed to: {currentTop}");
-                                        }
-                                        // BOTTOMS: Pants (3), Shorts (4)
-                                        else
-                                        {
-                                            currentBottom = selectedItem;
-                                            Console.WriteLine($"BOTTOM changed to: {currentBottom}");
-                                        }
-
-                                        hoodieColor = selectedItem;
-                                        lastOutfitSelectTime = DateTime.Now;
-                                        break; // Only select one category at a time
                                     }
                                 }
                             }
@@ -1971,62 +2441,71 @@ public class TuioDemo : Form, TuioListener
                         {
                             home = false;
                             scrollIndex = 0;
+                            selectionIndex = 0;
 
                             if (selectedHomeCard == 0) { bestsellers = true; hoodieColor = bestNames[0]; }
                             else if (selectedHomeCard == 1) { deals = true; hoodieColor = dealNames[0]; }
                             else if (selectedHomeCard == 2)
                             {
                                 outfitbuilder = true;
-                                // Set default outfit when entering
-                                //currentTop = "WhiteShirt";
-                                //currentBottom = "BlackPants";
+                                // Reset menu selection when entering
+                                selectedMenuCategory = -1;
+                                menuHoverIndex = 0;
                                 hoodieColor = currentTop;
                             }
                         }
-                        // Selection within Outfit Builder
-                        else if (outfitbuilder)
+                        // Navigation from Login page to LoginSteps or SignupSteps
+                        else if (login)
                         {
-                            if ((DateTime.Now - lastOutfitSelectTime).TotalMilliseconds > 600)
+                            login = false;
+                            if (selectedLoginCard == 0)
                             {
-
-                                for (int i = 0; i < scrollerIDs.Length; i++)
-                                {
-                                    // FIX: Check by SymbolID, not by dictionary key!
-                                    bool scrollerPresent = false;
-                                    foreach (TuioObject checkObj in objectList.Values)
-                                    {
-                                        if (checkObj.SymbolID == scrollerIDs[i])
-                                        {
-                                            scrollerPresent = true;
-                                            break;
-                                        }
-                                    }
-
-                                    if (scrollerPresent)
-                                    {
-                                        int itemIdx = Math.Abs(scrollIndices[i]) % items[i].Length;
-                                        string selectedItem = items[i][itemIdx];
-
-                                        // TOPS: Shirts (0), Hoodies (1), Jackets (2)
-                                        if (i <= 2)
-                                        {
-                                            currentTop = selectedItem;
-                                        }
-                                        // BOTTOMS: Pants (3), Shorts (4)
-                                        else
-                                        {
-                                            currentBottom = selectedItem;
-                                        }
-
-                                        hoodieColor = selectedItem;
-                                        lastOutfitSelectTime = DateTime.Now;
-                                        Console.WriteLine($"SELECTED: {selectedItem} | Top={currentTop} | Bottom={currentBottom}");
-                                        break;
-                                    }
-                                }
+                                loginsteps = true;
+                                Console.WriteLine("Navigating to Login Steps...");
+                            }
+                            else if (selectedLoginCard == 1)
+                            {
+                                signupsteps = true;
+                                Console.WriteLine("Navigating to Signup Steps...");
                             }
                         }
+                        // Selection within Outfit Builder - Select category from circular menu OR select item from category
+                        //else if (outfitbuilder)
+                        //{
+                        //    if ((DateTime.Now - lastOutfitSelectTime).TotalMilliseconds > 600)
+                        //    {
+                        //        // If no category selected yet, select the hovered menu category
+                        //        if (selectedMenuCategory < 0)
+                        //        {
+                        //            selectedMenuCategory = menuHoverIndex;
+                        //            Console.WriteLine("Selected category: " + selectedMenuCategory);
+                        //        }
+                        //        // If a category is already selected, confirm the current item in that category
+                        //        else
+                        //        {
+                        //            int catIdx = selectedMenuCategory;
+                        //            int itemIdx = Math.Abs(scrollIndices[catIdx]) % items[catIdx].Length;
+                        //            string selectedItem = items[catIdx][itemIdx];
+
+                        //            // TOPS: Shirts (0), Hoodies (1), Jackets (2)
+                        //            if (catIdx <= 2)
+                        //            {
+                        //                currentTop = selectedItem;
+                        //            }
+                        //            // BOTTOMS: Pants (3), Shorts (4)
+                        //            else
+                        //            {
+                        //                currentBottom = selectedItem;
+                        //            }
+
+                        //            hoodieColor = selectedItem;
+                        //            Console.WriteLine("SELECTED: " + selectedItem + " | Top=" + currentTop + " | Bottom=" + currentBottom);
+                        //        }
+                        //        lastOutfitSelectTime = DateTime.Now;
+                        //    }
+                        //}
                     }
+
 
                     // === OUTFIT BUILDER QUANTITY CONTROL (ID 3 & 4) ===
                     if ((tobj.SymbolID == 3 || tobj.SymbolID == 4) && outfitbuilder)
@@ -2085,8 +2564,8 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
-                    // === OUTFIT BUILDER DELETE ITEM (ID 16) ===
-                    if (tobj.SymbolID == 16 && outfitbuilder)
+                    // === OUTFIT BUILDER DELETE ITEM (ID 12) ===
+                    if (tobj.SymbolID == 12 && outfitbuilder)
                     {
                         if ((DateTime.Now - hoodieSwitch).TotalMilliseconds > 500)
                         {
@@ -2180,19 +2659,93 @@ public class TuioDemo : Form, TuioListener
 
 
                     //Handles the logic for switching between the Home cards on the home page using the object with SymbolID 7, allowing users to browse through different featured items or categories by rotating the object while on the home page.
-                    if (tobj.SymbolID == 7 && home)
+                    if (tobj.SymbolID == 7)
                     {
-                        if ((DateTime.Now - homeSwitchTime).TotalMilliseconds > 500)
+                        // Home page: select between Bestsellers, Deals, Outfit Builder
+                        if (home)
                         {
-                            if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                            if ((DateTime.Now - homeSwitchTime).TotalMilliseconds > 500)
                             {
-                                selectedHomeCard = (selectedHomeCard + 1) % 3;
-                                homeSwitchTime = DateTime.Now;
+                                if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                                {
+                                    selectedHomeCard = (selectedHomeCard + 1) % 3;
+                                    homeSwitchTime = DateTime.Now;
+                                }
+                                else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                                {
+                                    selectedHomeCard = (selectedHomeCard - 1 + 3) % 3;
+                                    homeSwitchTime = DateTime.Now;
+                                }
                             }
-                            else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                        }
+                        // Login page: select between Login and Signup
+                        else if (login)
+                        {
+                            if ((DateTime.Now - homeSwitchTime).TotalMilliseconds > 500)
                             {
-                                selectedHomeCard = (selectedHomeCard - 1 + 3) % 3;
-                                homeSwitchTime = DateTime.Now;
+                                if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                                {
+                                    selectedLoginCard = (selectedLoginCard + 1) % 2;
+                                    homeSwitchTime = DateTime.Now;
+                                }
+                                else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                                {
+                                    selectedLoginCard = (selectedLoginCard - 1 + 2) % 2;
+                                    homeSwitchTime = DateTime.Now;
+                                }
+                            }
+                        }
+                        // Bestsellers/Deals pages: scroll and select items
+                        else if (bestsellers || deals)
+                        {
+                            if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 450)
+                            {
+                                string[] currentList = deals ?
+                                    new string[] { "Navy Shirt", "Black Hoodie", "Denim Pants", "Black Jacket", "Pink Hoodie", "Burgundy Shirt", "Black Pants", "Denim Jacket" } :
+                                    new string[] { "Navy Shirt", "Black Hoodie", "Denim Pants", "Black Jacket", "Pink Hoodie", "Burgundy Shirt", "Black Pants", "Denim Jacket" };
+
+                                bool changed = false;
+
+                                // Rotate Right - move selection right, scroll only when at rightmost card (index 3)
+                                if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120)
+                                {
+                                    if (selectionIndex < 3)
+                                    {
+                                        // Move selection to the right
+                                        selectionIndex++;
+                                        changed = true;
+                                    }
+                                    else
+                                    {
+                                        // Selection is at rightmost card, scroll the list
+                                        scrollIndex = (scrollIndex + 1) % currentList.Length;
+                                        changed = true;
+                                    }
+                                }
+                                // Rotate Left - move selection left, scroll only when at leftmost card (index 0)
+                                else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340)
+                                {
+                                    if (selectionIndex > 0)
+                                    {
+                                        // Move selection to the left
+                                        selectionIndex--;
+                                        changed = true;
+                                    }
+                                    else
+                                    {
+                                        // Selection is at leftmost card, scroll the list
+                                        scrollIndex = (scrollIndex - 1 + currentList.Length) % currentList.Length;
+                                        changed = true;
+                                    }
+                                }
+
+                                if (changed)
+                                {
+                                    // Update hoodieColor to the currently selected item
+                                    int selectedItemIndex = (scrollIndex + selectionIndex) % currentList.Length;
+                                    hoodieColor = currentList[selectedItemIndex];
+                                    lastScrollTime = DateTime.Now;
+                                }
                             }
                         }
                     }
@@ -2291,36 +2844,6 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
-                    // Handles the logic for scrolling through the bestsellers on the home page using the object with SymbolID 9, allowing users to browse through featured products by rotating the object while on the home page.
-                    if (tobj.SymbolID == 9 && (bestsellers || deals))
-                    {
-                        if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 450)
-                        {
-                            int oldIndex = scrollIndex;
-                            string[] currentList = deals ?
-                                new string[] { "Navy Shirt", "Black Hoodie", "Denim Pants", "Black Jacket", "Pink Hoodie", "Burgundy Shirt", "Black Pants", "Denim Jacket" } :
-                                new string[] { "Navy Shirt", "Black Hoodie", "Denim Pants", "Black Jacket", "Pink Hoodie", "Burgundy Shirt", "Black Pants", "Denim Jacket" };
-
-                            // Scroll Right
-                            if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120)
-                            {
-                                scrollIndex = (scrollIndex + 1) % currentList.Length;
-                            }
-                            // Scroll Left
-                            else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340)
-                            {
-                                scrollIndex = (scrollIndex - 1 + currentList.Length) % currentList.Length;
-                            }
-
-                            if (oldIndex != scrollIndex)
-                            {
-                                // FIX: This forces the selection border to move to the new first card
-                                hoodieColor = currentList[scrollIndex];
-                                lastScrollTime = DateTime.Now;
-                            }
-                        }
-                    }
-
                     // PLUS BUTTON
                     if (tobj.SymbolID == 3 && (clothes || bestsellers || deals))
                     {
@@ -2381,57 +2904,79 @@ public class TuioDemo : Form, TuioListener
 
                             // 3. Reset scroll index so the next time we enter a page, it starts at the beginning
                             scrollIndex = 0;
+                            selectionIndex = 0;
+                            selectedMenuCategory = -1;
+                            menuHoverIndex = 0;
 
                             Console.WriteLine("Returning to Home Page...");
                         }
+                        // Return from LoginSteps or SignupSteps back to Login page
+                        else if (loginsteps || signupsteps)
+                        {
+                            loginsteps = false;
+                            signupsteps = false;
+                            login = true;
+                            Console.WriteLine("Returning to Login Page...");
+                        }
                     }
 
-                    // 1. SCROLLING LOGIC (IDs 11 to 15)
 
-                    for (int i = 0; i < scrollerIDs.Length; i++)
+                    if (outfitbuilder)
                     {
-                        if (tobj.SymbolID == scrollerIDs[i])
+                        // --- STEP A: ROTATE MENU HOVER (ID 9) ---
+                        if (tobj.SymbolID == 9)
                         {
-                            // Use a cooldown to prevent scrolling too fast
-                            if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 400)
+                            if ((DateTime.Now - lastMenuRotateTime).TotalMilliseconds > 500)
                             {
-                                // Rotate Right
                                 if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120)
-                                    scrollIndices[i]++;
-                                // Rotate Left
+                                {
+                                    menuHoverIndex = (menuHoverIndex + 1) % 5;
+                                    lastMenuRotateTime = DateTime.Now;
+                                }
                                 else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340)
-                                    scrollIndices[i] = (scrollIndices[i] > 0) ? scrollIndices[i] - 1 : 100; // Large number to prevent negative
+                                {
+                                    menuHoverIndex = (menuHoverIndex - 1 + 5) % 5;
+                                    lastMenuRotateTime = DateTime.Now;
+                                }
+                            }
+                        }
 
-                                lastScrollTime = DateTime.Now;
+                        // --- STEP B: SELECT CATEGORY (ID 8) ---
+                        // When ID 8 is placed, it "locks in" the category you were hovering over
+                        if (tobj.SymbolID == 8)
+                        {
+                            selectedMenuCategory = menuHoverIndex;
+                            Console.WriteLine("Locked Category: " + selectedMenuCategory);
+                        }
+
+                        // --- STEP C: UNIVERSAL SCROLLING (ID 7 ONLY) ---
+                        if (tobj.SymbolID == 7 && selectedMenuCategory >= 0)
+                        {
+                            if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 800)
+                            {
+                                int cat = selectedMenuCategory;
+                                int oldIdx = scrollIndices[cat];
+
+                                if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120) // Rotate Right
+                                    scrollIndices[cat] = (scrollIndices[cat] + 1) % items[cat].Length;
+                                else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340) // Rotate Left
+                                    scrollIndices[cat] = (scrollIndices[cat] - 1 + items[cat].Length) % items[cat].Length;
+
+                                if (oldIdx != scrollIndices[cat])
+                                {
+                                    lastScrollTime = DateTime.Now;
+
+                                    // --- THIS FIXES THE DISPLAY ---
+                                    // We update the 'worn' items IMMEDIATELY as you scroll
+                                    string newItem = items[cat][scrollIndices[cat]];
+                                    if (cat <= 2) currentTop = newItem; // Shirts, Hoodies, Jackets
+                                    else currentBottom = newItem;      // Pants, Shorts
+
+                                    hoodieColor = newItem; // Focus for quantity
+                                }
                             }
                         }
                     }
-
-                    // Inside TUIO Update Loop
-                    if (objectList.ContainsKey(2)) // Selection Mode Active
-                    {
-                        // PLUS (ID 3)
-                        if (tobj.SymbolID == 3 && (DateTime.Now - hoodieCount).TotalMilliseconds > 500)
-                        {
-                            if (!string.IsNullOrEmpty(hoodieColor))
-                            {
-                                if (!cart.ContainsKey(hoodieColor)) cart[hoodieColor] = 0;
-                                cart[hoodieColor]++;
-                                hoodieCount = DateTime.Now;
-                            }
-                        }
-
-                        // MINUS (ID 4)
-                        if (tobj.SymbolID == 4 && (DateTime.Now - hoodieCount).TotalMilliseconds > 500)
-                        {
-                            if (cart.ContainsKey(hoodieColor) && cart[hoodieColor] > 0)
-                            {
-                                cart[hoodieColor]--;
-                                hoodieCount = DateTime.Now;
-                            }
-                        }
-                    }
-
 
                     if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
                     {
