@@ -322,7 +322,7 @@ public class TuioDemo : Form, TuioListener
             string[] navItems = { "Home", "Login/Signup", "Cart" };
 
             // Styling
-            Font navFont = new Font("Segoe UI", 18f, FontStyle.Regular);
+            Font navFont = new Font("Segoe UI", 20f, FontStyle.Regular);
             Brush navBrush = dark ? Brushes.White : Brushes.Black;
             Pen underlinePen = new Pen(dark ? Color.White : Color.FromArgb(222, 200, 150), 3);
 
