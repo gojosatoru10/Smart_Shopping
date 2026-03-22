@@ -1,14 +1,15 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Threading;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Windows.Forms;
 using TUIO;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 public class TuioDemo : Form, TuioListener
 {
@@ -1175,6 +1176,8 @@ public class TuioDemo : Form, TuioListener
                 }
                 catch { }
 
+
+
                 // 2. Layout Setup
                 string[] bestNames = { "Navy Shirt", "Black Hoodie", "Denim Pants", "Black Jacket", "Pink Hoodie", "Burgundy Shirt", "Black Pants", "Denim Jacket" };
                 string[] bestFiles = { "NavyShirt.png", "BlackHoodie.png", "DenimPants.png", "BlackJacket.png", "PinkHoodie.png", "BurgundyShirt.png", "BlackPants.png", "DenimJacket.png" };
@@ -1214,10 +1217,19 @@ public class TuioDemo : Form, TuioListener
                     selectionColor = Color.FromArgb(100, 70, 40);
                     textBrush = Brushes.Black;
                 }
+
+
                 Pen btnOutline = new Pen(Color.Black, 2);
 
                 g.SmoothingMode = SmoothingMode.AntiAlias;
 
+                //using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
+                //{
+                //    g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), 35, 380);
+                //    //g.DrawString("►", arrowFont, new SolidBrush(selectionColor), 1950, 400);
+                //}
+
+                RectangleF rectt;
                 // 4. Draw 4 visible cards starting from scrollIndex
                 for (int i = 0; i < 4; i++)
                 {
@@ -1227,7 +1239,6 @@ public class TuioDemo : Form, TuioListener
 
                     // Selection Logic: The white border stays on the first card (scrollIndex)
                     bool isSelected = (hoodieColor == currentItemName);
-
                     float x = startX + i * (cardWidth + spacing);
                     float y;
                     float shadowOffset;
@@ -1244,6 +1255,23 @@ public class TuioDemo : Form, TuioListener
 
                     RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
                     RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
+
+                    if (i == 0)
+                    {
+                        using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
+                        {
+                            g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), rect.X - 45, rect.Y + (cardHeight / 2) - 20);
+                            //g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
+                        }
+                    }
+                    if(i==3)
+                    {
+                        using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
+                        {
+                            //g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), rect.X - 45, rect.Y + (cardHeight / 2) - 20);
+                            g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
+                        }
+                    }
 
                     // A. Draw Shadow
                     using (GraphicsPath shadowPath = RoundedRect(shadowRect, 25))
@@ -1522,6 +1550,24 @@ public class TuioDemo : Form, TuioListener
 
                     RectangleF rect = new RectangleF(x, y, cardWidth, cardHeight);
                     RectangleF shadowRect = new RectangleF(x + shadowOffset, y + shadowOffset, cardWidth, cardHeight);
+
+
+                    if (i == 0)
+                    {
+                        using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
+                        {
+                            g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), rect.X - 45, rect.Y + (cardHeight / 2) - 20);
+                            //g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
+                        }
+                    }
+                    if (i == 3)
+                    {
+                        using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
+                        {
+                            //g.DrawString("◄", arrowFont, new SolidBrush(selectionColor), rect.X - 45, rect.Y + (cardHeight / 2) - 20);
+                            g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
+                        }
+                    }
 
                     // A. Shadow
                     using (GraphicsPath shadowPath = RoundedRect(shadowRect, 25))
