@@ -313,6 +313,57 @@ public class TuioDemo : Form, TuioListener
         }
         ///
 
+        void DrawNavigationBar(string currentPage)
+        {
+            float cw = ClientSize.Width;
+            float navY = 70; // Height from the top
+
+            // Define the Nav Items
+            string[] navItems = { "Home", "Login/Signup", "Cart" };
+
+            // Styling
+            Font navFont = new Font("Segoe UI", 18f, FontStyle.Regular);
+            Brush navBrush = dark ? Brushes.White : Brushes.Black;
+            Pen underlinePen = new Pen(dark ? Color.White : Color.FromArgb(222, 200, 150), 3);
+
+            // Layout math: Distribute across the top-right or center
+            float startX = cw * 0.22f; // Adjust this to move the whole bar left/right
+            float itemSpacing = cw * 0.23f;
+
+            for (int i = 0; i < navItems.Length; i++)
+            {
+                string item = navItems[i];
+                SizeF textSize = g.MeasureString(item, navFont);
+                float itemX = startX + (i * itemSpacing);
+
+                // Draw the Text
+                if (item != "Cart")
+                {
+                    g.DrawString(item, navFont, navBrush, itemX, navY);
+                }
+                else
+                {
+                    g.DrawString(item, navFont, navBrush, itemX + 100, navY);
+                }
+
+                // Draw the Underline if it's the current page
+                if (item.Equals(currentPage, StringComparison.OrdinalIgnoreCase) ||
+                   (item == "Login/Signup" && currentPage == "Login"))
+                {
+                    float lineY = navY + textSize.Height + 5;
+                    // Draw the underline bar slightly wider than the text
+                    if (item == "Cart")
+                    {
+                        g.DrawLine(underlinePen, itemX + 100, lineY, itemX + 100 + textSize.Width, lineY);
+                    }
+                    else
+                    {
+                        g.DrawLine(underlinePen, itemX, lineY, itemX + textSize.Width, lineY);
+                    }
+                }
+            }
+        }
+
         /// Draws The Home Screen
         void DrawHomeScreen()
         {
@@ -326,13 +377,16 @@ public class TuioDemo : Form, TuioListener
                     g.DrawImage(tempBg, 0, 0);
                 }
 
+                // --- ADDED NAVIGATION BAR HERE ---
+                DrawNavigationBar("Home");
+
                 float cw = ClientSize.Width;
                 float ch = ClientSize.Height;
 
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
@@ -471,6 +525,9 @@ public class TuioDemo : Form, TuioListener
                 ResizeImage(ref bg);
                 g.DrawImage(bg, new Rectangle(0, 0, ClientSize.Width, ClientSize.Height));
 
+                // --- ADDED NAVIGATION BAR HERE ---
+                DrawNavigationBar("Login");
+
                 float cw = ClientSize.Width;
                 float ch = ClientSize.Height;
 
@@ -479,7 +536,7 @@ public class TuioDemo : Form, TuioListener
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
                     {
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                     }
                 }
                 catch { }
@@ -618,7 +675,7 @@ public class TuioDemo : Form, TuioListener
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
                     {
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                     }
                 }
                 catch { }
@@ -775,7 +832,7 @@ public class TuioDemo : Form, TuioListener
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
                     {
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                     }
                 }
                 catch { }
@@ -957,7 +1014,7 @@ public class TuioDemo : Form, TuioListener
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
@@ -1114,7 +1171,7 @@ public class TuioDemo : Form, TuioListener
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
@@ -1391,7 +1448,7 @@ public class TuioDemo : Form, TuioListener
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
@@ -1668,23 +1725,103 @@ public class TuioDemo : Form, TuioListener
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
-                // Dynamic Theme Colors
-                Color cardCol = dark ? Color.FromArgb(100, 100, 100) : Color.FromArgb(235, 215, 160);
-                Color shadowCol = dark ? Color.FromArgb(40, 40, 40) : Color.FromArgb(180, 160, 110);
-                Color btnCol = dark ? Color.FromArgb(70, 90, 120) : Color.FromArgb(255, 190, 100);
-                Color selectionColor = dark ? Color.White : Color.FromArgb(100, 70, 40);
-                Color barColor = dark ? Color.FromArgb(60, 60, 60) : Color.FromArgb(220, 200, 150);
-                Color menuSliceColor = dark ? Color.FromArgb(80, 80, 80) : Color.FromArgb(245, 225, 175);
-                Color menuSliceSelectedColor = dark ? Color.FromArgb(40, 40, 40) : Color.FromArgb(200, 160, 100);
-                Color menuSliceHoverColor = dark ? Color.FromArgb(150, 150, 150) : Color.FromArgb(255, 240, 200);
+                Color cardCol;
+                if (dark)
+                {
+                    cardCol = Color.FromArgb(100, 100, 100);
+                }
+                else
+                {
+                    cardCol = Color.FromArgb(235, 215, 160);
+                }
+                Color shadowCol;
+                if (dark)
+                {
+                    shadowCol = Color.FromArgb(40, 40, 40);
+                }
+                else
+                {
+                    shadowCol = Color.FromArgb(180, 160, 110);
+                }
+                Color btnCol;
+                if (dark)
+                {
+                    btnCol = Color.FromArgb(70, 90, 120);
+                }
+                else
+                {
+                    btnCol = Color.FromArgb(255, 190, 100);
+                }
+                Color selectionColor;
+                if (dark)
+                {
+                    selectionColor = Color.White;
+                }
+                else
+                {
+                    selectionColor = Color.FromArgb(100, 70, 40);
+                }
+                Color barColor;
+                if (dark)
+                {
+                    barColor = Color.FromArgb(60, 60, 60);
+                }
+                else
+                {
+                    barColor = Color.FromArgb(220, 200, 150);
+                }
+                Color menuSliceColor;
+                if (dark)
+                {
+                    menuSliceColor = Color.FromArgb(80, 80, 80);
+                }
+                else
+                {
+                    menuSliceColor = Color.FromArgb(245, 225, 175);
+                }
+                Color menuSliceSelectedColor;
+                if (dark)
+                {
+                    menuSliceSelectedColor = Color.FromArgb(40, 40, 40);
+                }
+                else
+                {
+                    menuSliceSelectedColor = Color.FromArgb(200, 160, 100);
+                }
+                Color menuSliceHoverColor;
+                if (dark)
+                {
+                    menuSliceHoverColor = Color.FromArgb(150, 150, 150);
+                }
+                else
+                {
+                    menuSliceHoverColor = Color.FromArgb(255, 240, 200);
+                }
 
                 // FIXED: Use this brush for ALL text to prevent disappearing in Dark Mode
-                Brush textBrush = dark ? Brushes.White : Brushes.Black;
-                Pen borderPen = new Pen(dark ? Color.Gray : Color.White, 2);
+                Brush textBrush;
+                if (dark)
+                {
+                    textBrush = Brushes.White;
+                }
+                else
+                {
+                    textBrush = Brushes.Black;
+                }
+                Color borderColor;
+                if (dark)
+                {
+                    borderColor = Color.Gray;
+                }
+                else
+                {
+                    borderColor = Color.White;
+                }
+                Pen borderPen = new Pen(borderColor, 2);
                 Pen selectionPen = new Pen(selectionColor, 3);
 
                 // === LEFT PART: HUGE OUTFIT CARD (PREVIEW) ===
@@ -1732,7 +1869,13 @@ public class TuioDemo : Form, TuioListener
 
                 // === CART PREVIEW (BOTTOM LEFT) ===
                 List<string> cartItemsList = new List<string>();
-                foreach (var entry in cart) if (entry.Value > 0) cartItemsList.Add(entry.Key);
+                foreach (var entry in cart)
+                {
+                    if (entry.Value > 0)
+                    {
+                        cartItemsList.Add(entry.Key);
+                    }
+                }
 
                 if (cartItemsList.Count > 0)
                 {
@@ -1740,7 +1883,7 @@ public class TuioDemo : Form, TuioListener
                     RectangleF cpRect = new RectangleF(cpX, cpY, cpW, cpH);
                     g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(cpX + 8, cpY + 8, cpW, cpH), 25));
                     g.FillPath(new SolidBrush(cardCol), RoundedRect(cpRect, 25));
-                    g.DrawString($"Cart Preview ({cartItemsList.Count})", new Font("Segoe UI", 16, FontStyle.Bold), textBrush, cpX + 20, cpY + 12);
+                    g.DrawString(String.Format("Cart Preview ({0})", cartItemsList.Count), new Font("Segoe UI", 16, FontStyle.Bold), textBrush, cpX + 20, cpY + 12);
 
                     float itemY = cpY + 55;
                     using (Font itemFont = new Font("Segoe UI", 10, FontStyle.Bold))
@@ -1804,9 +1947,29 @@ public class TuioDemo : Form, TuioListener
                     string displayedItem = items[catIdx][itemIdx];
 
                     g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(catRect.X + 12, catRect.Y + 12, cardSize, cardSize), 25));
-                    g.FillPath(new SolidBrush(isScrolling ? (dark ? Color.FromArgb(120, 110, 80) : Color.FromArgb(255, 245, 200)) : cardCol), RoundedRect(catRect, 25));
 
-                    if (isScrolling) g.DrawPath(new Pen(selectionColor, 5), RoundedRect(new RectangleF(catRect.X - 5, catRect.Y - 5, cardSize + 10, cardSize + 10), 30));
+                    Color fillColor;
+                    if (isScrolling)
+                    {
+                        if (dark)
+                        {
+                            fillColor = Color.FromArgb(120, 110, 80);
+                        }
+                        else
+                        {
+                            fillColor = Color.FromArgb(255, 245, 200);
+                        }
+                    }
+                    else
+                    {
+                        fillColor = cardCol;
+                    }
+                    g.FillPath(new SolidBrush(fillColor), RoundedRect(catRect, 25));
+
+                    if (isScrolling)
+                    {
+                        g.DrawPath(new Pen(selectionColor, 5), RoundedRect(new RectangleF(catRect.X - 5, catRect.Y - 5, cardSize + 10, cardSize + 10), 30));
+                    }
 
                     using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
                     {
@@ -1831,8 +1994,22 @@ public class TuioDemo : Form, TuioListener
                 for (int i = 0; i < 5; i++)
                 {
                     float currAngle = startAngle + i * sliceAngle;
-                    bool isHovered = (menuHoverIndex == i), isSelected = (selectedMenuCategory == i);
-                    Color sliceColor = isSelected ? menuSliceSelectedColor : (isHovered ? menuSliceHoverColor : menuSliceColor);
+                    bool isHovered = (menuHoverIndex == i);
+                    bool isSelected = (selectedMenuCategory == i);
+
+                    Color sliceColor;
+                    if (isSelected)
+                    {
+                        sliceColor = menuSliceSelectedColor;
+                    }
+                    else if (isHovered)
+                    {
+                        sliceColor = menuSliceHoverColor;
+                    }
+                    else
+                    {
+                        sliceColor = menuSliceColor;
+                    }
 
                     using (GraphicsPath slicePath = new GraphicsPath())
                     {
@@ -1840,27 +2017,84 @@ public class TuioDemo : Form, TuioListener
                         slicePath.AddArc(menuCenterX - innerRadius, menuCenterY - innerRadius, innerRadius * 2, innerRadius * 2, currAngle + sliceAngle, -sliceAngle);
                         slicePath.CloseFigure();
                         g.FillPath(new SolidBrush(sliceColor), slicePath);
-                        g.DrawPath(new Pen(isHovered ? selectionColor : (dark ? Color.Gray : Color.White), isHovered ? 4 : 1), slicePath);
+
+                        Color penColor;
+                        int penWidth;
+                        if (isHovered)
+                        {
+                            penColor = selectionColor;
+                            penWidth = 4;
+                        }
+                        else
+                        {
+                            if (dark)
+                            {
+                                penColor = Color.Gray;
+                            }
+                            else
+                            {
+                                penColor = Color.White;
+                            }
+                            penWidth = 1;
+                        }
+                        g.DrawPath(new Pen(penColor, penWidth), slicePath);
                     }
                     float iconA = (currAngle + sliceAngle / 2) * (float)Math.PI / 180f;
                     float ix = menuCenterX + (float)Math.Cos(iconA) * (menuRadius + innerRadius) / 2 - 20;
                     float iy = menuCenterY + (float)Math.Sin(iconA) * (menuRadius + innerRadius) / 2 - 20;
-                    try { using (Bitmap icon = new Bitmap(Path.Combine(themePath, catIcons[i]))) g.DrawImage(icon, ix, iy, 40, 40); } catch { }
+                    try
+                    {
+                        using (Bitmap icon = new Bitmap(Path.Combine(themePath, catIcons[i])))
+                        {
+                            g.DrawImage(icon, ix, iy, 40, 40);
+                        }
+                    }
+                    catch { }
                 }
 
                 g.FillEllipse(new SolidBrush(cardCol), menuCenterX - innerRadius, menuCenterY - innerRadius, innerRadius * 2, innerRadius * 2);
-                try { using (Bitmap mIcon = new Bitmap(Path.Combine(themePath, "Menu.png"))) g.DrawImage(mIcon, menuCenterX - 25, menuCenterY - 25, 50, 50); } catch { }
+                try
+                {
+                    using (Bitmap mIcon = new Bitmap(Path.Combine(themePath, "Menu.png")))
+                    {
+                        g.DrawImage(mIcon, menuCenterX - 25, menuCenterY - 25, 50, 50);
+                    }
+                }
+                catch { }
 
                 // === BACK BUTTON ===
                 RectangleF backRect = new RectangleF(cw - 85, 25, 60, 60);
                 bool backActive = HasObjectWithSymbolID(10);
                 g.FillEllipse(new SolidBrush(shadowCol), backRect.X, backRect.Y + 4, 60, 60);
-                g.FillEllipse(new SolidBrush(backActive ? Color.Gold : btnCol), backRect);
-                g.DrawEllipse(new Pen(dark ? Color.White : Color.Black, 2), backRect);
+
+                Color backFillColor;
+                if (backActive)
+                {
+                    backFillColor = Color.Gold;
+                }
+                else
+                {
+                    backFillColor = btnCol;
+                }
+                g.FillEllipse(new SolidBrush(backFillColor), backRect);
+
+                Color backPenColor;
+                if (dark)
+                {
+                    backPenColor = Color.White;
+                }
+                else
+                {
+                    backPenColor = Color.Black;
+                }
+                g.DrawEllipse(new Pen(backPenColor, 2), backRect);
                 g.DrawString("BACK", new Font("Segoe UI", 10, FontStyle.Bold), textBrush, backRect.X + 8, backRect.Y + 20);
 
             }
-            catch (Exception ex) { Console.WriteLine("Builder Error: " + ex.Message); }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Builder Error: " + ex.Message);
+            }
         }
         if (outfitbuilder == true)
         {
@@ -1879,16 +2113,24 @@ public class TuioDemo : Form, TuioListener
                     ResizeImage(ref tempBg);
                     g.DrawImage(tempBg, 0, 0);
                 }
+
+                // --- ADDED NAVIGATION BAR HERE ---
+                DrawNavigationBar("Cart");
+
                 try
                 {
                     using (Bitmap logo = new Bitmap(Path.Combine(themePath, "Logo.png")))
-                        g.DrawImage(logo, -100, 0, 400, 200);
+                        g.DrawImage(logo, -50, -40, 350, 300);
                 }
                 catch { }
 
                 float cw = ClientSize.Width;
                 float ch = ClientSize.Height;
-                int totalItems = cart.Sum(x => x.Value);
+                int totalItems = 0;
+                foreach (KeyValuePair<string, int> item in cart)
+                {
+                    totalItems = totalItems + item.Value;
+                }
 
                 float cardW = cw * 0.60f; // Slightly wider to fit longer names
                 float cardH = ch * 0.75f;
@@ -2025,7 +2267,7 @@ public class TuioDemo : Form, TuioListener
                                 // Price Calculation
                                 float price = qty * 50.00f; // Simplified: 50 per item
                                 subtotal += price;
-                                string pStr = $"{price:F2}$";
+                                string pStr = price.ToString("F2") + "$";
                                 g.DrawString(pStr, itemFont, textBrush, cardX + cardW - 50 - g.MeasureString(pStr, itemFont).Width, itemY + 12);
 
                                 itemY += 65; // Spacing for next item
@@ -2204,7 +2446,7 @@ public class TuioDemo : Form, TuioListener
                         {
                             if (!string.IsNullOrEmpty(hoodieColor) && cart.ContainsKey(hoodieColor) && cart[hoodieColor] > 0)
                             {
-                                Console.WriteLine($"CHECKOUT: Deleting {hoodieColor} from cart");
+                                Console.WriteLine(String.Format("CHECKOUT: Deleting {0} from cart", hoodieColor));
                                 cart[hoodieColor] = 0;
 
                                 // Select another item in cart if available
@@ -2519,20 +2761,20 @@ public class TuioDemo : Form, TuioListener
                                 if (tobj.SymbolID == 3)
                                 {
                                     cart[hoodieColor]++;
-                                    Console.WriteLine($"OUTFIT BUILDER: Added 1 to {hoodieColor}, total: {cart[hoodieColor]}");
+                                    Console.WriteLine(String.Format("OUTFIT BUILDER: Added 1 to {0}, total: {1}", hoodieColor, cart[hoodieColor]));
                                     hoodieCount = DateTime.Now;
                                 }
                                 // Minus button (ID 4) - only if quantity > 0
                                 else if (tobj.SymbolID == 4 && cart[hoodieColor] > 0)
                                 {
                                     cart[hoodieColor]--;
-                                    Console.WriteLine($"OUTFIT BUILDER: Removed 1 from {hoodieColor}, total: {cart[hoodieColor]}");
+                                    Console.WriteLine(String.Format("OUTFIT BUILDER: Removed 1 from {0}, total: {1}", hoodieColor, cart[hoodieColor]));
                                     hoodieCount = DateTime.Now;
                                 }
                             }
                             else
                             {
-                                Console.WriteLine($"OUTFIT BUILDER: hoodieColor={hoodieColor} not in cart or empty");
+                                Console.WriteLine(String.Format("OUTFIT BUILDER: hoodieColor={0} not in cart or empty", hoodieColor));
                             }
                         }
                     }
@@ -2547,7 +2789,7 @@ public class TuioDemo : Form, TuioListener
                             {
                                 if (!cart.ContainsKey(currentTop)) cart[currentTop] = 0;
                                 cart[currentTop]++;
-                                Console.WriteLine($"Added {currentTop} to cart");
+                                Console.WriteLine(String.Format("Added {0} to cart", currentTop));
                                 // Set hoodieColor to the added item for selection
                                 hoodieColor = currentTop;
                             }
@@ -2557,7 +2799,7 @@ public class TuioDemo : Form, TuioListener
                             {
                                 if (!cart.ContainsKey(currentBottom)) cart[currentBottom] = 0;
                                 cart[currentBottom]++;
-                                Console.WriteLine($"Added {currentBottom} to cart");
+                                Console.WriteLine(String.Format("Added {0} to cart", currentBottom));
                             }
 
                             hoodieSwitch = DateTime.Now;
@@ -2571,18 +2813,18 @@ public class TuioDemo : Form, TuioListener
                         {
                             if (!string.IsNullOrEmpty(hoodieColor) && cart.ContainsKey(hoodieColor) && cart[hoodieColor] > 0)
                             {
-                                Console.WriteLine($"OUTFIT BUILDER: Deleting {hoodieColor} from cart and outfit");
+                                Console.WriteLine(String.Format("OUTFIT BUILDER: Deleting {0} from cart and outfit", hoodieColor));
 
                                 // Remove from outfit display so it won't be added again
                                 if (currentTop == hoodieColor)
                                 {
                                     currentTop = "";
-                                    Console.WriteLine($"Removed {hoodieColor} from currentTop");
+                                    Console.WriteLine(String.Format("Removed {0} from currentTop", hoodieColor));
                                 }
                                 if (currentBottom == hoodieColor)
                                 {
                                     currentBottom = "";
-                                    Console.WriteLine($"Removed {hoodieColor} from currentBottom");
+                                    Console.WriteLine(String.Format("Removed {0} from currentBottom", hoodieColor));
                                 }
 
                                 cart[hoodieColor] = 0;
@@ -2639,7 +2881,7 @@ public class TuioDemo : Form, TuioListener
                                 else if (currentIdx >= cartScrollIndex + 4)
                                     cartScrollIndex = currentIdx - 3;
 
-                                Console.WriteLine($"Selected cart item: {hoodieColor} (index {currentIdx})");
+                                Console.WriteLine(String.Format("Selected cart item: {0} (index {1})", hoodieColor, currentIdx));
                                 lastSelectionTime = DateTime.Now;
                             }
                         }
