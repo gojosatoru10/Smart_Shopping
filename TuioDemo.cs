@@ -104,7 +104,6 @@ public class TuioDemo : Form, TuioListener
     private int cthoodieBurgundy = 0;
     private int cthoodiePink = 0;
 
-    private DateTime hoodieCount = DateTime.MinValue;
     DateTime lastOutfitSelectTime = DateTime.MinValue;
 
     Font font = new Font("Arial", 10.0f);
