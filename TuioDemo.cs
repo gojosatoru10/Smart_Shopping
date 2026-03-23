@@ -34,8 +34,6 @@ public class TuioDemo : Form, TuioListener
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
-
-    /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
 
     private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
@@ -93,9 +91,6 @@ public class TuioDemo : Form, TuioListener
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
     public DateTime hoodieSwitch = DateTime.MinValue;
-
-    public DateTime hoodieCount = DateTime.MinValue;
-
     public int cooldownSeconds = 1;
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
@@ -111,6 +106,7 @@ public class TuioDemo : Form, TuioListener
     private int cthoodieBurgundy = 0;
     private int cthoodiePink = 0;
 
+    private DateTime hoodieCount = DateTime.MinValue;
     DateTime lastOutfitSelectTime = DateTime.MinValue;
 
     Font font = new Font("Arial", 10.0f);
@@ -155,7 +151,7 @@ public class TuioDemo : Form, TuioListener
         /// Resolve the asset root path and set the initial theme path to the Light theme. This allows for flexibility in where the assets are stored, making it easier to run the application in different environments without needing to change the code.
         assetRootPath = ResolveAssetRootPath();
 
-        
+
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -2398,7 +2394,7 @@ public class TuioDemo : Form, TuioListener
             themeTimer.Interval = 1; // check every 60 seconds
             themeTimer.Tick += (s, e) => UpdateThemeByTime();
             themeTimer.Start();
-            
+
         }
 
         void UpdateThemeByTime()
@@ -2440,7 +2436,7 @@ public class TuioDemo : Form, TuioListener
             }
         }
 
-        
+
 
         // draw the objects
         if (objectList.Count > 0)
@@ -2457,7 +2453,7 @@ public class TuioDemo : Form, TuioListener
                     int oy = tobj.getScreenY(height);
                     int size = height / 10;
 
-                    
+
 
                     /// Handle Theme Switching
                     //if (tobj.SymbolID == 0)
@@ -2479,28 +2475,28 @@ public class TuioDemo : Form, TuioListener
                     //}
                     ///
 
-                    /// Handle Hoodie Color Switching
-                    if (tobj.SymbolID == 2 && clothes)
-                    {
-                        if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
-                        {
-                            hoodieSwitch = DateTime.Now;
+                    ///// Handle Hoodie Color Switching
+                    //if (tobj.SymbolID == 2 && clothes)
+                    //{
+                    //    if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
+                    //    {
+                    //        hoodieSwitch = DateTime.Now;
 
-                            int currentIndex = Array.IndexOf(hoodieOrder, hoodieColor);
-                            if (currentIndex < 0) currentIndex = 0;
+                    //        int currentIndex = Array.IndexOf(hoodieOrder, hoodieColor);
+                    //        if (currentIndex < 0) currentIndex = 0;
 
-                            if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
-                            {
-                                currentIndex = (currentIndex + 1) % hoodieOrder.Length;
-                            }
-                            else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
-                            {
-                                currentIndex = (currentIndex - 1 + hoodieOrder.Length) % hoodieOrder.Length;
-                            }
+                    //        if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                    //        {
+                    //            currentIndex = (currentIndex + 1) % hoodieOrder.Length;
+                    //        }
+                    //        else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                    //        {
+                    //            currentIndex = (currentIndex - 1 + hoodieOrder.Length) % hoodieOrder.Length;
+                    //        }
 
-                            hoodieColor = hoodieOrder[currentIndex];
-                        }
-                    }
+                    //        hoodieColor = hoodieOrder[currentIndex];
+                    //    }
+                    //}
                     ///
 
                     // Handles the logic behind adjusting the hoodie quantity in the cart
@@ -2638,36 +2634,36 @@ public class TuioDemo : Form, TuioListener
                     }
 
                     /// Handles the logic for proceeding to checkout when the object with SymbolID 5 is rotated, ensuring that the user has selected a hoodie color and quantity before allowing them to move to the checkout page.
-                    if (tobj.SymbolID == 6 && clothes)
-                    {
-                        if (hoodieColor == "Black")
-                        {
-                            clothes = false;
-                            checkout = true;
-                        }
+                    //if (tobj.SymbolID == 6 && clothes)
+                    //{
+                    //    if (hoodieColor == "Black")
+                    //    {
+                    //        clothes = false;
+                    //        checkout = true;
+                    //    }
 
-                        if (hoodieColor == "Pink")
-                        {
-                            clothes = false;
-                            checkout = true;
-                        }
+                    //    if (hoodieColor == "Pink")
+                    //    {
+                    //        clothes = false;
+                    //        checkout = true;
+                    //    }
 
-                        if (hoodieColor == "Burgundy")
-                        {
-                            clothes = false;
-                            checkout = true;
-                        }
-                        if (hoodieColor == "Grey")
-                        {
-                            clothes = false;
-                            checkout = true;
-                        }
-                    }
+                    //    if (hoodieColor == "Burgundy")
+                    //    {
+                    //        clothes = false;
+                    //        checkout = true;
+                    //    }
+                    //    if (hoodieColor == "Grey")
+                    //    {
+                    //        clothes = false;
+                    //        checkout = true;
+                    //    }
+                    //}
                     // === OUTFIT BUILDER SCROLLING (ID 11 for all categories) ===
                     // ========== OUTFIT BUILDER COMPLETE LOGIC ==========
                     if (outfitbuilder)
                     {
-                        // --- SCROLLING LOGIC using ID 11 for the selected category ---
+                        // --- SCROLLING LOGIC using ID 7 for the selected category ---
                         if (selectedMenuCategory >= 0 && selectedMenuCategory < 5)
                         {
                             int catIdx = selectedMenuCategory;
