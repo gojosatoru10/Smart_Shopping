@@ -33,6 +33,8 @@ public class TuioDemo : Form, TuioListener
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
+
+    /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
 
     // Expanded Dictionary for all items
@@ -84,6 +86,9 @@ public class TuioDemo : Form, TuioListener
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
     public DateTime hoodieSwitch = DateTime.MinValue;
+
+    public DateTime hoodieCount = DateTime.MinValue;
+
     public int cooldownSeconds = 1;
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
