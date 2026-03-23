@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms;
+
 using TUIO;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
@@ -28,12 +29,16 @@ public class TuioDemo : Form, TuioListener
 
     private bool fullscreen;
     private bool verbose;
-    public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false, loginsteps = false, signupsteps = false;
+    public bool home = true, login = false, clothes = false, checkout = false, dark, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false, loginsteps = false, signupsteps = false;
     int ctBlackJacket = 0, ctDenimJacket = 0, ctDenimPants = 0, ctNavyShirt = 0, ctBlackPants = 0, ctBurgundyShirt = 0, ctBlackHoodie = 0, ctPinkHoodie = 0;
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
     public string themePath;
+
+    private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
+
+
 
     // Expanded Dictionary for all items
     // Ensure these strings match bestNames exactly!
@@ -68,6 +73,8 @@ public class TuioDemo : Form, TuioListener
     // --- Scroll Tracking for Outfit Builder ---
     // Index 0: Shirts, 1: Hoodies, 2: Jackets, 3: Pants, 4: Shorts
     int[] scrollIndices = new int[5] { 0, 0, 0, 0, 0 };
+
+    int ct = 0;
 
     // --- Item Arrays for Outfit Builder ---
     string[][] items = {
@@ -143,8 +150,8 @@ public class TuioDemo : Form, TuioListener
 
         /// Resolve the asset root path and set the initial theme path to the Light theme. This allows for flexibility in where the assets are stored, making it easier to run the application in different environments without needing to change the code.
         assetRootPath = ResolveAssetRootPath();
-        themePath = Path.Combine(assetRootPath, "Light");
 
+        
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -313,6 +320,8 @@ public class TuioDemo : Form, TuioListener
             }
         }
         ///
+
+
 
         void DrawNavigationBar(string currentPage)
         {
@@ -1264,7 +1273,7 @@ public class TuioDemo : Form, TuioListener
                             //g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
                         }
                     }
-                    if(i==3)
+                    if (i == 3)
                     {
                         using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
                         {
@@ -2380,8 +2389,30 @@ public class TuioDemo : Form, TuioListener
         {
             DrawThankYouScreen();
         }
+        void InitializeThemeTimer()
+        {
+            themeTimer.Interval = 1; // check every 60 seconds
+            themeTimer.Tick += (s, e) => UpdateThemeByTime();
+            themeTimer.Start();
+            
+        }
 
+        void UpdateThemeByTime()
+        {
+            int currentHour = DateTime.Now.Hour;
+            bool shouldBeDark = !(currentHour >= 6 && currentHour < 15);
+
+            if (dark != shouldBeDark)
+            {
+                dark = shouldBeDark;
+                themePath = Path.Combine(assetRootPath, dark ? "Dark" : "Light");
+
+                Invalidate(); // forces UI redraw immediately
+            }
+        }
         ///
+
+        InitializeThemeTimer();
 
         // draw the cursor path
         if (cursorList.Count > 0)
@@ -2405,6 +2436,8 @@ public class TuioDemo : Form, TuioListener
             }
         }
 
+        
+
         // draw the objects
         if (objectList.Count > 0)
         {
@@ -2420,24 +2453,26 @@ public class TuioDemo : Form, TuioListener
                     int oy = tobj.getScreenY(height);
                     int size = height / 10;
 
-                    /// Handle Theme Switching
-                    if (tobj.SymbolID == 0)
-                    {
-                        if ((DateTime.Now - themeSwitch).TotalSeconds > cooldownSeconds)
-                        {
-                            dark = !dark;
-                            themeSwitch = DateTime.Now;
+                    
 
-                            if (!dark)
-                            {
-                                themePath = Path.Combine(assetRootPath, "Light"); ;
-                            }
-                            else
-                            {
-                                themePath = Path.Combine(assetRootPath, "Dark");
-                            }
-                        }
-                    }
+                    /// Handle Theme Switching
+                    //if (tobj.SymbolID == 0)
+                    //{
+                    //    if ((DateTime.Now - themeSwitch).TotalSeconds > cooldownSeconds)
+                    //    {
+                    //        dark = !dark;
+                    //        themeSwitch = DateTime.Now;
+
+                    //        if (!dark)
+                    //        {
+                    //            themePath = Path.Combine(assetRootPath, "Light"); ;
+                    //        }
+                    //        else
+                    //        {
+                    //            themePath = Path.Combine(assetRootPath, "Dark");
+                    //        }
+                    //    }
+                    //}
                     ///
 
                     /// Handle Hoodie Color Switching
@@ -3266,20 +3301,20 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
-                    if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
-                    {
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
+                    //if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
+                    //{
+                    //    g.TranslateTransform(ox, oy);
+                    //    g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                    //    g.TranslateTransform(-ox, -oy);
 
-                        g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                    //    g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
 
-                        g.TranslateTransform(ox, oy);
-                        g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
-                        g.TranslateTransform(-ox, -oy);
+                    //    g.TranslateTransform(ox, oy);
+                    //    g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
+                    //    g.TranslateTransform(-ox, -oy);
 
-                        g.DrawString(tobj.AngleDegrees + "", font, fntBrush, new PointF(ox - 10, oy - 10));
-                    }
+                    //    g.DrawString(tobj.AngleDegrees + "", font, fntBrush, new PointF(ox - 10, oy - 10));
+                    //}
                     ///
                 }
                 this.Invalidate();
