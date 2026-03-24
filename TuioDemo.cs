@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -2387,7 +2387,7 @@ public class TuioDemo : Form, TuioListener
 
         ///
 
-        // draw the cursor path
+        // draw current cursor point only (no path trail)
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -2400,7 +2400,6 @@ public class TuioDemo : Form, TuioListener
                     for (int i = 0; i < path.Count; i++)
                     {
                         TuioPoint next_point = path[i];
-                        g.DrawLine(curPen, current_point.getScreenX(width), current_point.getScreenY(height), next_point.getScreenX(width), next_point.getScreenY(height));
                         current_point = next_point;
                     }
                     g.FillEllipse(curBrush, current_point.getScreenX(width) - height / 100, current_point.getScreenY(height) - height / 100, height / 50, height / 50);
