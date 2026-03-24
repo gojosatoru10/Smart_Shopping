@@ -54,6 +54,7 @@ async def _get_connected_macs_windows_async(macs: list) -> set:
         return connected
 
     for mac in macs:
+        device = None
         try:
             device = await BluetoothDevice.from_bluetooth_address_async(mac_to_uint64(mac))
         except Exception:
@@ -66,7 +67,14 @@ async def _get_connected_macs_windows_async(macs: list) -> set:
             if device.connection_status == BluetoothConnectionStatus.CONNECTED:
                 connected.add(normalize_mac(mac))
         except Exception:
-            continue
+            pass
+        finally:
+            # Release the WinRT COM reference so the next poll gets a fresh
+            # object with updated connection_status instead of a cached one.
+            try:
+                device.close()
+            except Exception:
+                pass
 
     return connected
 

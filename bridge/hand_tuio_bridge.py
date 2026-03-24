@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 """Realtime hand tracking to TUIO bridge.
 
-This service reads camera input, tracks left/right hand cursors, recognizes gestures,
-and transmits TUIO messages over UDP for the existing C# TuioClient:
-  - /tuio/2Dcur  for hand cursor positions (always)
-  - /tuio/2Dobj  for synthesized navigation objects when swipe gestures are detected
-                 (SymbolID 1, matching the C# page-switching logic)
+Sends /tuio/2Dcur for hand cursors and /tuio/2Dobj for synthesized navigation (SymbolID 1)
+when swipe gestures are detected, matching TuioDemo.cs page-switching logic.
 
-Startup contract:
-- Select a free UDP target port when --tuio-port auto (default).
-- Print selected host/port to stdout.
-- Write selected host/port to a port file.
+Preview: MediaPipe hand landmarks (skeleton) plus fingertip dot + sid label when --show-preview.
+
+Requires: Python 3.9+, mediapipe with solutions API (e.g. mediapipe==0.10.21), opencv-python,
+dollarpy, python-osc, torch (optional for .pth load).
 """
 
 from __future__ import annotations
@@ -44,9 +41,9 @@ PORT_SCAN_END = 65535
 
 NAV_OBJECT_SESSION_ID = 1000
 NAV_OBJECT_SYMBOL_ID = 1
-SWIPE_RIGHT_ANGLE_RAD = 0.785398  # 45 deg — clockwise range (20-90) in C#
-SWIPE_LEFT_ANGLE_RAD = 5.32325    # 305 deg — counterclockwise range (270-340) in C#
-NAV_EMIT_FRAMES = 5               # how many frames to keep the synthesized object alive
+SWIPE_RIGHT_ANGLE_RAD = 0.785398
+SWIPE_LEFT_ANGLE_RAD = 5.32325
+NAV_EMIT_FRAMES = 5
 
 
 @dataclass
@@ -87,18 +84,14 @@ class GestureRecognizer:
 
     @staticmethod
     def _load_model_payload(model_path: Path):
-        payload = None
         torch_err: Optional[Exception] = None
         try:
             import torch  # type: ignore
 
-            payload = torch.load(model_path, map_location="cpu", weights_only=False)
-            return payload
+            return torch.load(model_path, map_location="cpu", weights_only=False)
         except Exception as exc:
             torch_err = exc
 
-        # Torch .pth files are often ZIP containers (PK header) and cannot be
-        # unpickled directly without torch serialization support.
         try:
             with model_path.open("rb") as fh:
                 header = fh.read(4)
@@ -110,8 +103,7 @@ class GestureRecognizer:
             pass
 
         with model_path.open("rb") as fh:
-            payload = pickle.load(fh)
-        return payload
+            return pickle.load(fh)
 
     def _load_recognizer(self, model_path: Path) -> Recognizer:
         payload = self._load_model_payload(model_path)
@@ -227,10 +219,6 @@ class TuioObjectSender:
         self,
         objects: Dict[int, Tuple[int, float, float, float, float, float, float, float, float]],
     ) -> None:
-        """Send a /tuio/2Dobj frame.
-
-        Each entry: session_id -> (class_id, x, y, angle, x_speed, y_speed, rot_speed, motion_accel, rot_accel)
-        """
         self.frame_seq += 1
         builder = OscBundleBuilder(IMMEDIATELY)
 
@@ -264,7 +252,6 @@ class TuioObjectSender:
         self.client.send(builder.build())
 
     def send_empty(self) -> None:
-        """Send an empty alive frame to remove all objects."""
         self.frame_seq += 1
         builder = OscBundleBuilder(IMMEDIATELY)
 
@@ -312,7 +299,6 @@ def normalize_label(label: str) -> str:
 
 
 def extract_swipe_direction(label: str) -> Optional[str]:
-    """Return 'left' or 'right' if label is a swipe gesture, else None."""
     name = normalize_label(label)
     if "swipe_left" in name:
         return "left"
@@ -381,14 +367,13 @@ def update_kinematics(state: HandState, dt: float) -> None:
 
 def maybe_trigger_burst(
     state: HandState,
-    recognizer: Optional[GestureRecognizer],
+    event: Optional[GestureEvent],
     cooldown_sec: float,
 ) -> None:
-    if recognizer is None:
+    if event is None:
         return
 
     now = time.time()
-    event = recognizer.classify(list(state.trajectory))
 
     if event.label == "unknown":
         return
@@ -409,20 +394,17 @@ def maybe_trigger_burst(
 
 
 def maybe_trigger_navigation(
-    state: HandState,
     nav: NavigationState,
-    recognizer: Optional[GestureRecognizer],
+    event: Optional[GestureEvent],
     cooldown_sec: float,
 ) -> None:
-    """Check for swipe gestures and trigger a navigation object emission."""
-    if recognizer is None:
+    if event is None:
         return
 
     now = time.time()
     if now - nav.last_trigger_ts < cooldown_sec:
         return
 
-    event = recognizer.classify(list(state.trajectory))
     direction = extract_swipe_direction(event.label)
     if direction is None:
         return
@@ -449,6 +431,63 @@ def cursor_output(state: HandState) -> Optional[Tuple[float, float, float, float
     return x, y, sx, sy, state.accel
 
 
+def _open_capture(index: int, use_dshow: bool):
+    if sys.platform == "win32" and use_dshow:
+        return cv2.VideoCapture(index, cv2.CAP_DSHOW)
+    return cv2.VideoCapture(index)
+
+
+def _frame_looks_live(frame) -> bool:
+    """Reject fully black / uninitialized frames (common before IRuin starts streaming)."""
+    if frame is None or frame.size == 0:
+        return False
+    return float(frame.mean()) > 2.0
+
+
+def list_available_cameras(use_dshow: bool) -> None:
+    print("Probing camera indices 0-9 (may take a few seconds)...")
+    for i in range(10):
+        cap = _open_capture(i, use_dshow)
+        if not cap.isOpened():
+            print(f"  [{i}] not available")
+            continue
+        ok = False
+        w = h = 0
+        for _ in range(5):
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                h, w = frame.shape[:2]
+                mean = float(frame.mean())
+                live = _frame_looks_live(frame)
+                print(f"  [{i}] OK  {w}x{h}  mean={mean:.1f}  {'live' if live else 'dark/static'}")
+                break
+            time.sleep(0.05)
+        else:
+            print(f"  [{i}] opened but no frames")
+        cap.release()
+
+
+def wait_for_live_camera(index: int, use_dshow: bool, timeout_sec: float, poll_sec: float) -> Optional[cv2.VideoCapture]:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        cap = _open_capture(index, use_dshow)
+        if cap.isOpened():
+            for _ in range(15):
+                ok, frame = cap.read()
+                if ok and frame is not None and _frame_looks_live(frame):
+                    print(f"Camera index {index}: streaming OK ({frame.shape[1]}x{frame.shape[0]})", flush=True)
+                    return cap
+                time.sleep(0.03)
+        if cap.isOpened():
+            cap.release()
+        print(
+            f"Waiting for camera index {index} (start IRuin on phone, same Wi‑Fi/USB)...",
+            flush=True,
+        )
+        time.sleep(poll_sec)
+    return None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Hand recognizer to TUIO bridge")
     parser.add_argument("--camera-index", type=int, default=0)
@@ -467,6 +506,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--show-preview", action="store_true")
     parser.add_argument("--no-gesture", action="store_true", help="Disable gesture burst mode")
+    parser.add_argument(
+        "--list-cameras",
+        action="store_true",
+        help="Print which camera indices open on this PC, then exit (use to pick IRuin index)",
+    )
+    parser.add_argument(
+        "--use-dshow",
+        action="store_true",
+        help="Windows: use DirectShow backend (often more stable for virtual webcams)",
+    )
+    parser.add_argument(
+        "--wait-for-camera",
+        action="store_true",
+        help="Do not use another camera: wait until this index delivers live video (e.g. IRuin app streaming)",
+    )
+    parser.add_argument(
+        "--wait-timeout-sec",
+        type=float,
+        default=300.0,
+        help="With --wait-for-camera, give up after this many seconds",
+    )
+    parser.add_argument(
+        "--wait-poll-sec",
+        type=float,
+        default=2.0,
+        help="Seconds between retries while waiting for camera",
+    )
     return parser.parse_args()
 
 
@@ -478,6 +544,10 @@ def resolve_target_port(host: str, port_arg: str) -> int:
 
 def main() -> int:
     args = parse_args()
+
+    if args.list_cameras:
+        list_available_cameras(args.use_dshow)
+        return 0
 
     try:
         target_port = resolve_target_port(args.tuio_host, args.tuio_port)
@@ -514,12 +584,27 @@ def main() -> int:
         "right": HandState(side="right", session_id=RIGHT_SESSION_ID, stroke_id=101),
     }
 
-    cap = cv2.VideoCapture(args.camera_index)
-    if not cap.isOpened():
-        print(f"ERROR failed to open camera index {args.camera_index}", file=sys.stderr)
-        return 1
+    if args.wait_for_camera:
+        cap = wait_for_live_camera(
+            args.camera_index,
+            args.use_dshow,
+            args.wait_timeout_sec,
+            args.wait_poll_sec,
+        )
+        if cap is None:
+            print("ERROR: timeout waiting for live camera stream.", file=sys.stderr)
+            return 1
+    else:
+        cap = _open_capture(args.camera_index, args.use_dshow)
+        if not cap.isOpened():
+            print(f"ERROR failed to open camera index {args.camera_index}", file=sys.stderr)
+            return 1
+        ok, test = cap.read()
+        if not ok or test is None:
+            print("ERROR: camera opened but no frames. Try --list-cameras or --wait-for-camera.", file=sys.stderr)
+            cap.release()
+            return 1
 
-    # Publish selected endpoint only after model and camera are confirmed ready.
     write_port_file(args.port_file, args.tuio_host, target_port)
     print(f"TUIO_HOST={args.tuio_host}")
     print(f"TUIO_PORT={target_port}")
@@ -561,8 +646,36 @@ def main() -> int:
                     update_kinematics(st, dt)
 
                     if gestures_enabled:
-                        maybe_trigger_burst(st, recognizer, args.gesture_cooldown)
-                        maybe_trigger_navigation(st, nav_state, recognizer, args.gesture_cooldown)
+                        gesture_event = recognizer.classify(list(st.trajectory)) if recognizer else None
+                        maybe_trigger_burst(st, gesture_event, args.gesture_cooldown)
+                        maybe_trigger_navigation(nav_state, gesture_event, args.gesture_cooldown)
+
+            if args.show_preview:
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        mp_drawing.draw_landmarks(
+                            frame,
+                            hand_landmarks,
+                            mp_hands.HAND_CONNECTIONS,
+                            mp_drawing_styles.get_default_hand_landmarks_style(),
+                            mp_drawing_styles.get_default_hand_connections_style(),
+                        )
+                for st in state_by_side.values():
+                    if st.position is None:
+                        continue
+                    px = int(st.position[0] * frame.shape[1])
+                    py = int(st.position[1] * frame.shape[0])
+                    cv2.circle(frame, (px, py), 8, (0, 255, 0), -1)
+                    cv2.putText(
+                        frame,
+                        f"{st.side} sid={st.session_id}",
+                        (px + 10, py + 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (0, 255, 0),
+                        1,
+                        cv2.LINE_AA,
+                    )
 
             if now - last_sent < frame_period:
                 if args.show_preview:
@@ -588,9 +701,14 @@ def main() -> int:
                 obj_payload: Dict[int, Tuple[int, float, float, float, float, float, float, float, float]] = {
                     NAV_OBJECT_SESSION_ID: (
                         NAV_OBJECT_SYMBOL_ID,
-                        0.5, 0.5,
+                        0.5,
+                        0.5,
                         angle,
-                        0.0, 0.0, 0.0, 0.0, 0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
                     )
                 }
                 object_sender.send_frame(obj_payload)
@@ -603,33 +721,6 @@ def main() -> int:
             last_sent = now
 
             if args.show_preview:
-                if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        mp_drawing.draw_landmarks(
-                            frame,
-                            hand_landmarks,
-                            mp_hands.HAND_CONNECTIONS,
-                            mp_drawing_styles.get_default_hand_landmarks_style(),
-                            mp_drawing_styles.get_default_hand_connections_style(),
-                        )
-
-                for st in state_by_side.values():
-                    if st.position is None:
-                        continue
-                    px = int(st.position[0] * frame.shape[1])
-                    py = int(st.position[1] * frame.shape[0])
-                    cv2.circle(frame, (px, py), 8, (0, 255, 0), -1)
-                    cv2.putText(
-                        frame,
-                        f"{st.side} sid={st.session_id}",
-                        (px + 10, py + 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),
-                        1,
-                        cv2.LINE_AA,
-                    )
-
                 cv2.imshow("hand_tuio_bridge", frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break

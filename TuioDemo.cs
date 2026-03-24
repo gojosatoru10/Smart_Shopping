@@ -678,7 +678,12 @@ public class TuioDemo : Form, TuioListener
                     else
                     {
                         headline = loginStatusMessage;
-                        subline = "Keep your paired Bluetooth device connected.";
+                        if (bluetoothSigninStatus == "login_required")
+                            subline = "Your phone or headset must stay connected (see devices_db.json).";
+                        else if (bluetoothSigninStatus == "searching")
+                            subline = "Enable Bluetooth in Windows settings, then try again.";
+                        else
+                            subline = "Keep your paired Bluetooth device connected.";
                     }
 
                     SizeF headlineSize = g.MeasureString(headline, statusFont);
@@ -2457,7 +2462,7 @@ public class TuioDemo : Form, TuioListener
 
         ///
 
-        // draw the cursor path
+        // draw the current cursor point (no path trail)
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -3477,6 +3482,15 @@ public class TuioDemo : Form, TuioListener
             else if (bluetoothSigninStatus == "error")
             {
                 loginStatusMessage = "Bluetooth unavailable. Waiting for device...";
+            }
+            else if (bluetoothSigninStatus == "login_required")
+            {
+                // Python watcher: no allowed device currently connected (disconnect or not paired)
+                loginStatusMessage = "Bluetooth disconnected — connect your device to sign in.";
+            }
+            else if (bluetoothSigninStatus == "searching")
+            {
+                loginStatusMessage = "Bluetooth adapter off or unavailable. Turn Bluetooth on.";
             }
             else if (!string.IsNullOrWhiteSpace(reason))
             {
