@@ -152,7 +152,7 @@ try {
     $port = [int]$portInfo.port
 
     Write-Host "Bridge sending TUIO to port: $port"
-    Write-Host "TuioDemo should listen on $port (same as reacTIVision if using 3333)."
+    Write-Host "reacTIVision sends to port 3333 (default). TuioDemo listens on $port."
 
     $demoExeCandidates = @(
         (Join-Path $RepoRoot "bin/Debug/TuioDemo.exe"),

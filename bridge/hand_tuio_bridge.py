@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Realtime hand tracking to TUIO bridge.
 
-Sends /tuio/2Dcur for hand cursors and /tuio/2Dobj for synthesized navigation (SymbolID 1)
-when swipe gestures are detected, matching TuioDemo.cs page-switching logic.
+This service reads camera input, tracks left/right hand cursors, recognizes gestures,
+and transmits TUIO messages over UDP for the existing C# TuioClient:
+  - /tuio/2Dcur  for hand cursor positions (always)
+  - /tuio/2Dobj  for synthesized navigation objects when swipe gestures are detected
+                 (SymbolID 1, matching the C# page-switching logic)
 
-Requires: Python 3.9+, mediapipe with solutions API (e.g. mediapipe==0.10.21), opencv-python,
-dollarpy, python-osc, torch (optional for .pth load).
+Startup contract:
+- Select a free UDP target port when --tuio-port auto (default).
+- Print selected host/port to stdout.
+- Write selected host/port to a port file.
 """
 
 from __future__ import annotations
@@ -24,6 +29,8 @@ from pathlib import Path
 from typing import Deque, Dict, List, Optional, Sequence, Tuple
 
 import cv2
+from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
+from mediapipe.python.solutions import drawing_utils as mp_drawing
 from mediapipe.python.solutions import hands as mp_hands
 from dollarpy import Point, Recognizer, Template
 from pythonosc.osc_bundle_builder import IMMEDIATELY, OscBundleBuilder
@@ -37,9 +44,9 @@ PORT_SCAN_END = 65535
 
 NAV_OBJECT_SESSION_ID = 1000
 NAV_OBJECT_SYMBOL_ID = 1
-SWIPE_RIGHT_ANGLE_RAD = 0.785398  # 45 deg — clockwise range in C#
-SWIPE_LEFT_ANGLE_RAD = 5.32325  # 305 deg — counterclockwise range in C#
-NAV_EMIT_FRAMES = 5
+SWIPE_RIGHT_ANGLE_RAD = 0.785398  # 45 deg — clockwise range (20-90) in C#
+SWIPE_LEFT_ANGLE_RAD = 5.32325    # 305 deg — counterclockwise range (270-340) in C#
+NAV_EMIT_FRAMES = 5               # how many frames to keep the synthesized object alive
 
 
 @dataclass
@@ -80,14 +87,18 @@ class GestureRecognizer:
 
     @staticmethod
     def _load_model_payload(model_path: Path):
+        payload = None
         torch_err: Optional[Exception] = None
         try:
             import torch  # type: ignore
 
-            return torch.load(model_path, map_location="cpu", weights_only=False)
+            payload = torch.load(model_path, map_location="cpu", weights_only=False)
+            return payload
         except Exception as exc:
             torch_err = exc
 
+        # Torch .pth files are often ZIP containers (PK header) and cannot be
+        # unpickled directly without torch serialization support.
         try:
             with model_path.open("rb") as fh:
                 header = fh.read(4)
@@ -99,7 +110,8 @@ class GestureRecognizer:
             pass
 
         with model_path.open("rb") as fh:
-            return pickle.load(fh)
+            payload = pickle.load(fh)
+        return payload
 
     def _load_recognizer(self, model_path: Path) -> Recognizer:
         payload = self._load_model_payload(model_path)
@@ -215,6 +227,10 @@ class TuioObjectSender:
         self,
         objects: Dict[int, Tuple[int, float, float, float, float, float, float, float, float]],
     ) -> None:
+        """Send a /tuio/2Dobj frame.
+
+        Each entry: session_id -> (class_id, x, y, angle, x_speed, y_speed, rot_speed, motion_accel, rot_accel)
+        """
         self.frame_seq += 1
         builder = OscBundleBuilder(IMMEDIATELY)
 
@@ -248,6 +264,7 @@ class TuioObjectSender:
         self.client.send(builder.build())
 
     def send_empty(self) -> None:
+        """Send an empty alive frame to remove all objects."""
         self.frame_seq += 1
         builder = OscBundleBuilder(IMMEDIATELY)
 
@@ -295,6 +312,7 @@ def normalize_label(label: str) -> str:
 
 
 def extract_swipe_direction(label: str) -> Optional[str]:
+    """Return 'left' or 'right' if label is a swipe gesture, else None."""
     name = normalize_label(label)
     if "swipe_left" in name:
         return "left"
@@ -363,13 +381,14 @@ def update_kinematics(state: HandState, dt: float) -> None:
 
 def maybe_trigger_burst(
     state: HandState,
-    event: Optional[GestureEvent],
+    recognizer: Optional[GestureRecognizer],
     cooldown_sec: float,
 ) -> None:
-    if event is None:
+    if recognizer is None:
         return
 
     now = time.time()
+    event = recognizer.classify(list(state.trajectory))
 
     if event.label == "unknown":
         return
@@ -390,17 +409,20 @@ def maybe_trigger_burst(
 
 
 def maybe_trigger_navigation(
+    state: HandState,
     nav: NavigationState,
-    event: Optional[GestureEvent],
+    recognizer: Optional[GestureRecognizer],
     cooldown_sec: float,
 ) -> None:
-    if event is None:
+    """Check for swipe gestures and trigger a navigation object emission."""
+    if recognizer is None:
         return
 
     now = time.time()
     if now - nav.last_trigger_ts < cooldown_sec:
         return
 
+    event = recognizer.classify(list(state.trajectory))
     direction = extract_swipe_direction(event.label)
     if direction is None:
         return
@@ -497,6 +519,7 @@ def main() -> int:
         print(f"ERROR failed to open camera index {args.camera_index}", file=sys.stderr)
         return 1
 
+    # Publish selected endpoint only after model and camera are confirmed ready.
     write_port_file(args.port_file, args.tuio_host, target_port)
     print(f"TUIO_HOST={args.tuio_host}")
     print(f"TUIO_PORT={target_port}")
@@ -538,9 +561,8 @@ def main() -> int:
                     update_kinematics(st, dt)
 
                     if gestures_enabled:
-                        gesture_event = recognizer.classify(list(st.trajectory)) if recognizer else None
-                        maybe_trigger_burst(st, gesture_event, args.gesture_cooldown)
-                        maybe_trigger_navigation(nav_state, gesture_event, args.gesture_cooldown)
+                        maybe_trigger_burst(st, recognizer, args.gesture_cooldown)
+                        maybe_trigger_navigation(st, nav_state, recognizer, args.gesture_cooldown)
 
             if now - last_sent < frame_period:
                 if args.show_preview:
@@ -566,14 +588,9 @@ def main() -> int:
                 obj_payload: Dict[int, Tuple[int, float, float, float, float, float, float, float, float]] = {
                     NAV_OBJECT_SESSION_ID: (
                         NAV_OBJECT_SYMBOL_ID,
-                        0.5,
-                        0.5,
+                        0.5, 0.5,
                         angle,
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.0,
-                        0.0,
+                        0.0, 0.0, 0.0, 0.0, 0.0,
                     )
                 }
                 object_sender.send_frame(obj_payload)
@@ -586,6 +603,16 @@ def main() -> int:
             last_sent = now
 
             if args.show_preview:
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        mp_drawing.draw_landmarks(
+                            frame,
+                            hand_landmarks,
+                            mp_hands.HAND_CONNECTIONS,
+                            mp_drawing_styles.get_default_hand_landmarks_style(),
+                            mp_drawing_styles.get_default_hand_connections_style(),
+                        )
+
                 for st in state_by_side.values():
                     if st.position is None:
                         continue

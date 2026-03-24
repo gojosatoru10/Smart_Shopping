@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using TUIO;
@@ -33,6 +34,17 @@ public class TuioDemo : Form, TuioListener
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
+    private readonly string bluetoothStatePath;
+
+    private string bluetoothSigninStatus = "searching";
+    private string bluetoothUsername = "";
+    private string bluetoothMac = "";
+    private string loginStatusMessage = "Searching for recently connected Bluetooth device...";
+    private DateTime lastBluetoothPollTime = DateTime.MinValue;
+    private DateTime bluetoothSignedInAt = DateTime.MinValue;
+    private string bluetoothIdentity = "";
+    private readonly TimeSpan bluetoothPollInterval = TimeSpan.FromSeconds(1);
+    private readonly TimeSpan loginAutoReturnDelay = TimeSpan.FromSeconds(2);
 
     /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
@@ -106,6 +118,8 @@ public class TuioDemo : Form, TuioListener
 
     DateTime lastOutfitSelectTime = DateTime.MinValue;
 
+    private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
+
     Font font = new Font("Arial", 10.0f);
     SolidBrush fntBrush = new SolidBrush(Color.White);
     SolidBrush bgrBrush = new SolidBrush(Color.FromArgb(0, 0, 64));
@@ -147,6 +161,7 @@ public class TuioDemo : Form, TuioListener
 
         /// Resolve the asset root path and set the initial theme path to the Light theme. This allows for flexibility in where the assets are stored, making it easier to run the application in different environments without needing to change the code.
         assetRootPath = ResolveAssetRootPath();
+        bluetoothStatePath = ResolveBluetoothStatePath();
         themePath = Path.Combine(assetRootPath, "Light");
 
     }
@@ -289,6 +304,8 @@ public class TuioDemo : Form, TuioListener
         // Getting the graphics object
         Graphics g = pevent.Graphics;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, width, height));
+
+        UpdateBluetoothSigninState();
 
         /// Resizes the give image to fit the screen.
         void ResizeImage(ref Bitmap img)
@@ -645,6 +662,34 @@ public class TuioDemo : Form, TuioListener
                     float tx = x + (circleSize - textSize.Width) / 2;
                     float ty = y + (circleSize - textSize.Height) / 2;
                     g.DrawString(labels[i], loginFont, textBrush, tx, ty);
+                }
+
+                using (Font statusFont = new Font("Segoe UI", 22f, FontStyle.Bold))
+                using (Font hintFont = new Font("Segoe UI", 14f, FontStyle.Regular))
+                {
+                    string headline;
+                    string subline;
+
+                    if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+                    {
+                        headline = "Detected user: " + bluetoothUsername;
+                        subline = "Returning to Home in 2 seconds...";
+                    }
+                    else
+                    {
+                        headline = loginStatusMessage;
+                        subline = "Keep your paired Bluetooth device connected.";
+                    }
+
+                    SizeF headlineSize = g.MeasureString(headline, statusFont);
+                    float headlineX = (cw - headlineSize.Width) / 2;
+                    float headlineY = ch * 0.85f;
+                    g.DrawString(headline, statusFont, textBrush, headlineX, headlineY);
+
+                    SizeF sublineSize = g.MeasureString(subline, hintFont);
+                    float sublineX = (cw - sublineSize.Width) / 2;
+                    float sublineY = headlineY + headlineSize.Height + 8;
+                    g.DrawString(subline, hintFont, textBrush, sublineX, sublineY);
                 }
             }
             catch (Exception ex)
@@ -1268,7 +1313,7 @@ public class TuioDemo : Form, TuioListener
                             //g.DrawString("►", arrowFont, new SolidBrush(selectionColor), rect.Right + 10, rect.Y + (cardHeight / 2) - 20);
                         }
                     }
-                    if(i==3)
+                    if (i == 3)
                     {
                         using (Font arrowFont = new Font("Arial", 22, FontStyle.Bold))
                         {
@@ -2385,9 +2430,34 @@ public class TuioDemo : Form, TuioListener
             DrawThankYouScreen();
         }
 
+
+        void InitializeThemeTimer()
+        {
+            themeTimer.Interval = 1; // check every 60 seconds
+            themeTimer.Tick += (s, e) => UpdateThemeByTime();
+            themeTimer.Start();
+
+        }
+
+        void UpdateThemeByTime()
+        {
+            int currentHour = DateTime.Now.Hour;
+            bool shouldBeDark = !(currentHour >= 6 && currentHour < 15);
+
+            if (dark != shouldBeDark)
+            {
+                dark = shouldBeDark;
+                themePath = Path.Combine(assetRootPath, dark ? "Dark" : "Light");
+
+                Invalidate(); // forces UI redraw immediately
+            }
+        }
+
+        InitializeThemeTimer();
+
         ///
 
-        // draw current cursor point only (no path trail)
+        // draw the cursor path
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -3331,6 +3401,113 @@ public class TuioDemo : Form, TuioListener
         return false;
     }
 
+    private void UpdateBluetoothSigninState()
+    {
+        DateTime now = DateTime.Now;
+
+        if (!login)
+        {
+            bluetoothSignedInAt = DateTime.MinValue;
+            bluetoothIdentity = "";
+            return;
+        }
+
+        if ((now - lastBluetoothPollTime) >= bluetoothPollInterval)
+        {
+            lastBluetoothPollTime = now;
+            ReadBluetoothStateFile();
+        }
+
+        if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+        {
+            string currentIdentity = bluetoothUsername + "|" + bluetoothMac;
+            if (currentIdentity != bluetoothIdentity)
+            {
+                bluetoothIdentity = currentIdentity;
+                bluetoothSignedInAt = now;
+            }
+
+            if (bluetoothSignedInAt != DateTime.MinValue && (now - bluetoothSignedInAt) >= loginAutoReturnDelay)
+            {
+                login = false;
+                loginsteps = false;
+                signupsteps = false;
+                home = true;
+            }
+        }
+        else
+        {
+            bluetoothSignedInAt = DateTime.MinValue;
+            bluetoothIdentity = "";
+        }
+    }
+
+    private void ReadBluetoothStateFile()
+    {
+        bluetoothSigninStatus = "searching";
+        bluetoothUsername = "";
+        bluetoothMac = "";
+        loginStatusMessage = "Searching for recently connected Bluetooth device...";
+
+        if (!File.Exists(bluetoothStatePath))
+        {
+            return;
+        }
+
+        try
+        {
+            string content = File.ReadAllText(bluetoothStatePath);
+            string status = ExtractJsonStringValue(content, "status");
+            string username = ExtractJsonStringValue(content, "username");
+            string mac = ExtractJsonStringValue(content, "mac");
+            string reason = ExtractJsonStringValue(content, "selection_reason");
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                bluetoothSigninStatus = status.Trim().ToLowerInvariant();
+            }
+
+            bluetoothUsername = username.Trim();
+            bluetoothMac = mac.Trim();
+
+            if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+            {
+                loginStatusMessage = "Detected user: " + bluetoothUsername;
+            }
+            else if (bluetoothSigninStatus == "error")
+            {
+                loginStatusMessage = "Bluetooth unavailable. Waiting for device...";
+            }
+            else if (!string.IsNullOrWhiteSpace(reason))
+            {
+                loginStatusMessage = "Searching for recently connected Bluetooth device...";
+            }
+        }
+        catch (Exception ex)
+        {
+            loginStatusMessage = "Searching for recently connected Bluetooth device...";
+            Console.WriteLine("Bluetooth state read error: " + ex.Message);
+        }
+    }
+
+    private static string ExtractJsonStringValue(string content, string key)
+    {
+        try
+        {
+            string pattern = "\"" + Regex.Escape(key) + "\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\\\"])*)\"";
+            Match m = Regex.Match(content, pattern, RegexOptions.CultureInvariant);
+            if (!m.Success)
+            {
+                return "";
+            }
+            return Regex.Unescape(m.Groups["v"].Value);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     // Draws rouded rectangles, used for buttons and cards in the UI
     private GraphicsPath RoundedRect(RectangleF bounds, int radius)
     {
@@ -3379,6 +3556,20 @@ public class TuioDemo : Form, TuioListener
         }
 
         return baseDir;
+    }
+
+    private static string ResolveBluetoothStatePath()
+    {
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string projectState = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".runtime", "current_user.json"));
+
+        if (File.Exists(projectState) || Directory.Exists(Path.GetDirectoryName(projectState)))
+        {
+            return projectState;
+        }
+
+        string localState = Path.Combine(baseDir, ".runtime", "current_user.json");
+        return localState;
     }
     ///
 

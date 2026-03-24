@@ -1,0 +1,10 @@
+{
+  "devices": 
+  {
+    "F0:AE:66:0B:05:D8": {"name": "omran", "gender": "male"},
+    "3C:38:24:99:93:A9": {"name": "youssef", "gender": "male"},
+    "9C:73:B1:1A:63:32": {"name": "Khalid", "gender": "male"},
+    "2C:C5:46:BE:23:20": {"name": "FreeBuds", "gender": "female"},
+    "27:24:13:89:6c:46": {"name": "Mahmoud", "gender": "male"}
+  }
+}
