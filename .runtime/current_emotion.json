@@ -1,0 +1,16 @@
+{
+  "emotion": "happy",
+  "confidence": 0.5725,
+  "adaptive_hint": "engaged",
+  "face_detected": true,
+  "scores": {
+    "angry": 0.0287,
+    "disgust": 0.0,
+    "fear": 0.1379,
+    "happy": 0.5725,
+    "sad": 0.0317,
+    "surprise": 0.1412,
+    "neutral": 0.0878
+  },
+  "timestamp": "2026-05-06T17:48:36.051474Z"
+}

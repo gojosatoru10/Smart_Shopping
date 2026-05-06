@@ -1,0 +1,9 @@
+{
+  "status": "signed_in",
+  "username": "Mahmoud",
+  "mac": "27:24:13:89:6C:46",
+  "connected_at": 1778089233,
+  "generated_at": 1778089710,
+  "source": "pybluez2",
+  "selection_reason": "most_recent_connected"
+}
