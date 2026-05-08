@@ -163,10 +163,14 @@ public class TuioDemo : Form, TuioListener
         bluetoothStatePath = ResolveBluetoothStatePath();
         themePath = Path.Combine(assetRootPath, "Light");
 
+<<<<<<< Updated upstream
         _adaptive = new AdaptiveUIController(this);
         _adaptive.StateChanged += OnAdaptiveStateChanged;
         _adaptive.Start();
 
+=======
+        
+>>>>>>> Stashed changes
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -2530,7 +2534,7 @@ public class TuioDemo : Form, TuioListener
             themeTimer.Interval = 1; // check every 60 seconds
             themeTimer.Tick += (s, e) => UpdateThemeByTime();
             themeTimer.Start();
-
+            
         }
 
         void UpdateThemeByTime()
@@ -2572,6 +2576,11 @@ public class TuioDemo : Form, TuioListener
             }
         }
 
+<<<<<<< Updated upstream
+=======
+        
+
+>>>>>>> Stashed changes
         // draw the objects
         if (objectList.Count > 0)
         {
@@ -2587,6 +2596,11 @@ public class TuioDemo : Form, TuioListener
                     int oy = tobj.getScreenY(height);
                     int size = height / 10;
 
+<<<<<<< Updated upstream
+=======
+                    
+
+>>>>>>> Stashed changes
                     /// Handle Theme Switching
                     if (tobj.SymbolID == 0)
                     {
