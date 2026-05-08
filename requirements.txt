@@ -1,0 +1,10 @@
+# Core dependencies for gesture tracking and classification
+mediapipe
+opencv-python
+dollarpy
+numpy
+ultralytics
+
+# Notebook runtime
+jupyter
+ipykernel

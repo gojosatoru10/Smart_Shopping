@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "E:\HCI\Project\Smart_Shopping\bridge\hand_tuio_bridge.py", line 30, in <module>
+    from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
+ModuleNotFoundError: No module named 'mediapipe.python'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "E:\HCI\Project\Smart_Shopping\bridge\hand_tuio_bridge.py", line 36, in <module>
+    mp_drawing_styles = mp.solutions.drawing_styles
+AttributeError: module 'mediapipe' has no attribute 'solutions'

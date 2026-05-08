@@ -1,16 +1,12 @@
-﻿using System;
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
-using System.Linq;
-using System.Threading;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
-
 using TUIO;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 public class TuioDemo : Form, TuioListener
 {
@@ -29,16 +25,26 @@ public class TuioDemo : Form, TuioListener
 
     private bool fullscreen;
     private bool verbose;
-    public bool home = true, login = false, clothes = false, checkout = false, dark, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false, loginsteps = false, signupsteps = false;
+    public bool home = true, login = false, clothes = false, checkout = false, dark = false, thankyou = false, bestsellers = false, deals = false, outfitbuilder = false, loginsteps = false, signupsteps = false;
     int ctBlackJacket = 0, ctDenimJacket = 0, ctDenimPants = 0, ctNavyShirt = 0, ctBlackPants = 0, ctBurgundyShirt = 0, ctBlackHoodie = 0, ctPinkHoodie = 0;
 
     /// Represents the root file system path for assets.
     private readonly string assetRootPath;
+    private readonly string bluetoothStatePath;
+
+    private string bluetoothSigninStatus = "searching";
+    private string bluetoothUsername = "";
+    private string bluetoothMac = "";
+    private string loginStatusMessage = "Searching for recently connected Bluetooth device...";
+    private DateTime lastBluetoothPollTime = DateTime.MinValue;
+    private DateTime bluetoothSignedInAt = DateTime.MinValue;
+    private string bluetoothIdentity = "";
+    private readonly TimeSpan bluetoothPollInterval = TimeSpan.FromSeconds(1);
+    private readonly TimeSpan loginAutoReturnDelay = TimeSpan.FromSeconds(2);
+    private AdaptiveUIController _adaptive;
+
+    /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
-
-    private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
-
-
 
     // Expanded Dictionary for all items
     // Ensure these strings match bestNames exactly!
@@ -74,8 +80,6 @@ public class TuioDemo : Form, TuioListener
     // Index 0: Shirts, 1: Hoodies, 2: Jackets, 3: Pants, 4: Shorts
     int[] scrollIndices = new int[5] { 0, 0, 0, 0, 0 };
 
-    int ct = 0;
-
     // --- Item Arrays for Outfit Builder ---
     string[][] items = {
     new string[] { "BlackShirt", "BrownShirt", "BurgundyShirt", "DarkBlueShirt", "NavyShirt", "PinkShirt", "PrintedShirt", "WhiteShirt" },
@@ -91,6 +95,9 @@ public class TuioDemo : Form, TuioListener
     public DateTime themeSwitch = DateTime.MinValue;
     public DateTime pageSwitch = DateTime.MinValue;
     public DateTime hoodieSwitch = DateTime.MinValue;
+
+    public DateTime hoodieCount = DateTime.MinValue;
+
     public int cooldownSeconds = 1;
     public int pageCooldown = 1;
     public int hoodieCooldown = 1;
@@ -106,8 +113,10 @@ public class TuioDemo : Form, TuioListener
     private int cthoodieBurgundy = 0;
     private int cthoodiePink = 0;
 
-    private DateTime hoodieCount = DateTime.MinValue;
     DateTime lastOutfitSelectTime = DateTime.MinValue;
+
+    private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
+    private float _baseFontSize = 12f;
 
     Font font = new Font("Arial", 10.0f);
     SolidBrush fntBrush = new SolidBrush(Color.White);
@@ -128,6 +137,7 @@ public class TuioDemo : Form, TuioListener
         this.ClientSize = new System.Drawing.Size(width, height);
         this.Name = "TuioDemo";
         this.Text = "Smart Shopping";
+        _baseFontSize = this.Font.Size;
 
         this.Closing += new CancelEventHandler(Form_Closing);
         this.KeyDown += new KeyEventHandler(Form_KeyDown);
@@ -150,7 +160,12 @@ public class TuioDemo : Form, TuioListener
 
         /// Resolve the asset root path and set the initial theme path to the Light theme. This allows for flexibility in where the assets are stored, making it easier to run the application in different environments without needing to change the code.
         assetRootPath = ResolveAssetRootPath();
+        bluetoothStatePath = ResolveBluetoothStatePath();
+        themePath = Path.Combine(assetRootPath, "Light");
 
+        _adaptive = new AdaptiveUIController(this);
+        _adaptive.StateChanged += OnAdaptiveStateChanged;
+        _adaptive.Start();
 
     }
 
@@ -208,7 +223,93 @@ public class TuioDemo : Form, TuioListener
         client.removeTuioListener(this);
 
         client.disconnect();
+        _adaptive?.Dispose();
         System.Environment.Exit(0);
+    }
+
+    private void OnAdaptiveStateChanged(object sender, AdaptiveStateChangedEventArgs e)
+    {
+        switch (e.State)
+        {
+            case AdaptiveState.Confused:
+                ShowHelpOverlay(true);
+                SetFontScale(1.25f);
+                break;
+
+            case AdaptiveState.Frustrated:
+                ShowHelpOverlay(true);
+                SetFontScale(1.25f);
+                break;
+
+            case AdaptiveState.SustainedFrustration:
+                ShowHelpOverlay(true);
+                ShowAttendantButton(true);
+                NavigateToHome();
+                break;
+
+            case AdaptiveState.Engaged:
+            case AdaptiveState.Interested:
+                ShowHelpOverlay(false);
+                ShowUpsellPanel(true);
+                SetFontScale(1.0f);
+                break;
+
+            case AdaptiveState.Disengaged:
+                ShowUpsellPanel(false);
+                PlayAttractAnimation();
+                break;
+
+            case AdaptiveState.Neutral:
+            default:
+                ShowHelpOverlay(false);
+                ShowUpsellPanel(false);
+                ShowAttendantButton(false);
+                SetFontScale(1.0f);
+                break;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[AdaptiveUI] {e.Emotion} -> {e.State} (conf={e.Confidence:P0})");
+    }
+
+    private void SetFontScale(float scale)
+    {
+        this.Font = new Font(this.Font.FontFamily, _baseFontSize * scale);
+        Invalidate();
+    }
+
+    private void ShowHelpOverlay(bool visible)
+    {
+        // helpOverlayPanel.Visible = visible;
+    }
+
+    private void ShowUpsellPanel(bool visible)
+    {
+        // upsellPanel.Visible = visible;
+    }
+
+    private void ShowAttendantButton(bool visible)
+    {
+        // attendantButton.Visible = visible;
+    }
+
+    private void NavigateToHome()
+    {
+        home = true;
+        login = false;
+        clothes = false;
+        checkout = false;
+        thankyou = false;
+        bestsellers = false;
+        deals = false;
+        outfitbuilder = false;
+        loginsteps = false;
+        signupsteps = false;
+        Invalidate();
+    }
+
+    private void PlayAttractAnimation()
+    {
+        Invalidate();
     }
 
     public void addTuioObject(TuioObject o)
@@ -293,6 +394,8 @@ public class TuioDemo : Form, TuioListener
         Graphics g = pevent.Graphics;
         g.FillRectangle(bgrBrush, new Rectangle(0, 0, width, height));
 
+        UpdateBluetoothSigninState();
+
         /// Resizes the give image to fit the screen.
         void ResizeImage(ref Bitmap img)
         {
@@ -320,8 +423,6 @@ public class TuioDemo : Form, TuioListener
             }
         }
         ///
-
-
 
         void DrawNavigationBar(string currentPage)
         {
@@ -650,6 +751,39 @@ public class TuioDemo : Form, TuioListener
                     float tx = x + (circleSize - textSize.Width) / 2;
                     float ty = y + (circleSize - textSize.Height) / 2;
                     g.DrawString(labels[i], loginFont, textBrush, tx, ty);
+                }
+
+                using (Font statusFont = new Font("Segoe UI", 22f, FontStyle.Bold))
+                using (Font hintFont = new Font("Segoe UI", 14f, FontStyle.Regular))
+                {
+                    string headline;
+                    string subline;
+
+                    if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+                    {
+                        headline = "Detected user: " + bluetoothUsername;
+                        subline = "Returning to Home in 2 seconds...";
+                    }
+                    else
+                    {
+                        headline = loginStatusMessage;
+                        if (bluetoothSigninStatus == "login_required")
+                            subline = "Your phone or headset must stay connected (see devices_db.json).";
+                        else if (bluetoothSigninStatus == "searching")
+                            subline = "Enable Bluetooth in Windows settings, then try again.";
+                        else
+                            subline = "Keep your paired Bluetooth device connected.";
+                    }
+
+                    SizeF headlineSize = g.MeasureString(headline, statusFont);
+                    float headlineX = (cw - headlineSize.Width) / 2;
+                    float headlineY = ch * 0.85f;
+                    g.DrawString(headline, statusFont, textBrush, headlineX, headlineY);
+
+                    SizeF sublineSize = g.MeasureString(subline, hintFont);
+                    float sublineX = (cw - sublineSize.Width) / 2;
+                    float sublineY = headlineY + headlineSize.Height + 8;
+                    g.DrawString(subline, hintFont, textBrush, sublineX, sublineY);
                 }
             }
             catch (Exception ex)
@@ -2389,6 +2523,8 @@ public class TuioDemo : Form, TuioListener
         {
             DrawThankYouScreen();
         }
+
+
         void InitializeThemeTimer()
         {
             themeTimer.Interval = 1; // check every 60 seconds
@@ -2410,11 +2546,12 @@ public class TuioDemo : Form, TuioListener
                 Invalidate(); // forces UI redraw immediately
             }
         }
-        ///
 
         InitializeThemeTimer();
 
-        // draw the cursor path
+        ///
+
+        // draw the current cursor point (no path trail)
         if (cursorList.Count > 0)
         {
             lock (cursorList)
@@ -2427,7 +2564,6 @@ public class TuioDemo : Form, TuioListener
                     for (int i = 0; i < path.Count; i++)
                     {
                         TuioPoint next_point = path[i];
-                        g.DrawLine(curPen, current_point.getScreenX(width), current_point.getScreenY(height), next_point.getScreenX(width), next_point.getScreenY(height));
                         current_point = next_point;
                     }
                     g.FillEllipse(curBrush, current_point.getScreenX(width) - height / 100, current_point.getScreenY(height) - height / 100, height / 50, height / 50);
@@ -2435,8 +2571,6 @@ public class TuioDemo : Form, TuioListener
                 }
             }
         }
-
-
 
         // draw the objects
         if (objectList.Count > 0)
@@ -2453,50 +2587,48 @@ public class TuioDemo : Form, TuioListener
                     int oy = tobj.getScreenY(height);
                     int size = height / 10;
 
-
-
                     /// Handle Theme Switching
-                    //if (tobj.SymbolID == 0)
-                    //{
-                    //    if ((DateTime.Now - themeSwitch).TotalSeconds > cooldownSeconds)
-                    //    {
-                    //        dark = !dark;
-                    //        themeSwitch = DateTime.Now;
+                    if (tobj.SymbolID == 0)
+                    {
+                        if ((DateTime.Now - themeSwitch).TotalSeconds > cooldownSeconds)
+                        {
+                            dark = !dark;
+                            themeSwitch = DateTime.Now;
 
-                    //        if (!dark)
-                    //        {
-                    //            themePath = Path.Combine(assetRootPath, "Light"); ;
-                    //        }
-                    //        else
-                    //        {
-                    //            themePath = Path.Combine(assetRootPath, "Dark");
-                    //        }
-                    //    }
-                    //}
+                            if (!dark)
+                            {
+                                themePath = Path.Combine(assetRootPath, "Light"); ;
+                            }
+                            else
+                            {
+                                themePath = Path.Combine(assetRootPath, "Dark");
+                            }
+                        }
+                    }
                     ///
 
-                    ///// Handle Hoodie Color Switching
-                    //if (tobj.SymbolID == 2 && clothes)
-                    //{
-                    //    if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
-                    //    {
-                    //        hoodieSwitch = DateTime.Now;
+                    /// Handle Hoodie Color Switching
+                    if (tobj.SymbolID == 2 && clothes)
+                    {
+                        if ((DateTime.Now - hoodieSwitch).TotalSeconds > hoodieCooldown)
+                        {
+                            hoodieSwitch = DateTime.Now;
 
-                    //        int currentIndex = Array.IndexOf(hoodieOrder, hoodieColor);
-                    //        if (currentIndex < 0) currentIndex = 0;
+                            int currentIndex = Array.IndexOf(hoodieOrder, hoodieColor);
+                            if (currentIndex < 0) currentIndex = 0;
 
-                    //        if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
-                    //        {
-                    //            currentIndex = (currentIndex + 1) % hoodieOrder.Length;
-                    //        }
-                    //        else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
-                    //        {
-                    //            currentIndex = (currentIndex - 1 + hoodieOrder.Length) % hoodieOrder.Length;
-                    //        }
+                            if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 90)
+                            {
+                                currentIndex = (currentIndex + 1) % hoodieOrder.Length;
+                            }
+                            else if (tobj.AngleDegrees > 270 && tobj.AngleDegrees < 340)
+                            {
+                                currentIndex = (currentIndex - 1 + hoodieOrder.Length) % hoodieOrder.Length;
+                            }
 
-                    //        hoodieColor = hoodieOrder[currentIndex];
-                    //    }
-                    //}
+                            hoodieColor = hoodieOrder[currentIndex];
+                        }
+                    }
                     ///
 
                     // Handles the logic behind adjusting the hoodie quantity in the cart
@@ -2634,36 +2766,36 @@ public class TuioDemo : Form, TuioListener
                     }
 
                     /// Handles the logic for proceeding to checkout when the object with SymbolID 5 is rotated, ensuring that the user has selected a hoodie color and quantity before allowing them to move to the checkout page.
-                    //if (tobj.SymbolID == 6 && clothes)
-                    //{
-                    //    if (hoodieColor == "Black")
-                    //    {
-                    //        clothes = false;
-                    //        checkout = true;
-                    //    }
+                    if (tobj.SymbolID == 6 && clothes)
+                    {
+                        if (hoodieColor == "Black")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
 
-                    //    if (hoodieColor == "Pink")
-                    //    {
-                    //        clothes = false;
-                    //        checkout = true;
-                    //    }
+                        if (hoodieColor == "Pink")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
 
-                    //    if (hoodieColor == "Burgundy")
-                    //    {
-                    //        clothes = false;
-                    //        checkout = true;
-                    //    }
-                    //    if (hoodieColor == "Grey")
-                    //    {
-                    //        clothes = false;
-                    //        checkout = true;
-                    //    }
-                    //}
+                        if (hoodieColor == "Burgundy")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+                        if (hoodieColor == "Grey")
+                        {
+                            clothes = false;
+                            checkout = true;
+                        }
+                    }
                     // === OUTFIT BUILDER SCROLLING (ID 11 for all categories) ===
                     // ========== OUTFIT BUILDER COMPLETE LOGIC ==========
                     if (outfitbuilder)
                     {
-                        // --- SCROLLING LOGIC using ID 7 for the selected category ---
+                        // --- SCROLLING LOGIC using ID 11 for the selected category ---
                         if (selectedMenuCategory >= 0 && selectedMenuCategory < 5)
                         {
                             int catIdx = selectedMenuCategory;
@@ -3301,20 +3433,20 @@ public class TuioDemo : Form, TuioListener
                         }
                     }
 
-                    //if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
-                    //{
-                    //    g.TranslateTransform(ox, oy);
-                    //    g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
-                    //    g.TranslateTransform(-ox, -oy);
+                    if (tobj.SymbolID == 1 || tobj.SymbolID == 2)
+                    {
+                        g.TranslateTransform(ox, oy);
+                        g.RotateTransform((float)(tobj.Angle / Math.PI * 180.0f));
+                        g.TranslateTransform(-ox, -oy);
 
-                    //    g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
+                        g.FillRectangle(objBrush, new Rectangle(ox - size / 2, oy - size / 2, size, size));
 
-                    //    g.TranslateTransform(ox, oy);
-                    //    g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
-                    //    g.TranslateTransform(-ox, -oy);
+                        g.TranslateTransform(ox, oy);
+                        g.RotateTransform(-1 * (float)(tobj.Angle / Math.PI * 180.0f));
+                        g.TranslateTransform(-ox, -oy);
 
-                    //    g.DrawString(tobj.AngleDegrees + "", font, fntBrush, new PointF(ox - 10, oy - 10));
-                    //}
+                        g.DrawString(tobj.AngleDegrees + "", font, fntBrush, new PointF(ox - 10, oy - 10));
+                    }
                     ///
                 }
                 this.Invalidate();
@@ -3349,6 +3481,20 @@ public class TuioDemo : Form, TuioListener
                     }
                 }
             }
+
+        }
+
+        // Always-on emotion badge (drawn outside any TUIO-object conditional so it shows on every page)
+        if (_adaptive != null && _adaptive.FaceDetected)
+        {
+            string badge = "😊 " + _adaptive.RawEmotion + " (" + _adaptive.Confidence.ToString("P0") + ")";
+            using (var bf = new Font("Segoe UI", 12f, FontStyle.Bold))
+            using (var bb = new SolidBrush(Color.FromArgb(180, 0, 0, 0)))
+            {
+                var sz = g.MeasureString(badge, bf);
+                g.FillRectangle(bb, 8, 8, sz.Width + 12, sz.Height + 6);
+                g.DrawString(badge, bf, Brushes.White, 14, 11);
+            }
         }
     }
 
@@ -3361,6 +3507,122 @@ public class TuioDemo : Form, TuioListener
                 return true;
         }
         return false;
+    }
+
+    private void UpdateBluetoothSigninState()
+    {
+        DateTime now = DateTime.Now;
+
+        if (!login)
+        {
+            bluetoothSignedInAt = DateTime.MinValue;
+            bluetoothIdentity = "";
+            return;
+        }
+
+        if ((now - lastBluetoothPollTime) >= bluetoothPollInterval)
+        {
+            lastBluetoothPollTime = now;
+            ReadBluetoothStateFile();
+        }
+
+        if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+        {
+            string currentIdentity = bluetoothUsername + "|" + bluetoothMac;
+            if (currentIdentity != bluetoothIdentity)
+            {
+                bluetoothIdentity = currentIdentity;
+                bluetoothSignedInAt = now;
+            }
+
+            if (bluetoothSignedInAt != DateTime.MinValue && (now - bluetoothSignedInAt) >= loginAutoReturnDelay)
+            {
+                login = false;
+                loginsteps = false;
+                signupsteps = false;
+                home = true;
+            }
+        }
+        else
+        {
+            bluetoothSignedInAt = DateTime.MinValue;
+            bluetoothIdentity = "";
+        }
+    }
+
+    private void ReadBluetoothStateFile()
+    {
+        bluetoothSigninStatus = "searching";
+        bluetoothUsername = "";
+        bluetoothMac = "";
+        loginStatusMessage = "Searching for recently connected Bluetooth device...";
+
+        if (!File.Exists(bluetoothStatePath))
+        {
+            return;
+        }
+
+        try
+        {
+            string content = File.ReadAllText(bluetoothStatePath);
+            string status = ExtractJsonStringValue(content, "status");
+            string username = ExtractJsonStringValue(content, "username");
+            string mac = ExtractJsonStringValue(content, "mac");
+            string reason = ExtractJsonStringValue(content, "selection_reason");
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                bluetoothSigninStatus = status.Trim().ToLowerInvariant();
+            }
+
+            bluetoothUsername = username.Trim();
+            bluetoothMac = mac.Trim();
+
+            if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+            {
+                loginStatusMessage = "Detected user: " + bluetoothUsername;
+            }
+            else if (bluetoothSigninStatus == "error")
+            {
+                loginStatusMessage = "Bluetooth unavailable. Waiting for device...";
+            }
+            else if (bluetoothSigninStatus == "login_required")
+            {
+                // Python watcher: no allowed device currently connected (disconnect or not paired)
+                loginStatusMessage = "Bluetooth disconnected — connect your device to sign in.";
+            }
+            else if (bluetoothSigninStatus == "searching")
+            {
+                loginStatusMessage = "Bluetooth adapter off or unavailable. Turn Bluetooth on.";
+            }
+            else if (!string.IsNullOrWhiteSpace(reason))
+            {
+                loginStatusMessage = "Searching for recently connected Bluetooth device...";
+            }
+        }
+        catch (Exception ex)
+        {
+            loginStatusMessage = "Searching for recently connected Bluetooth device...";
+            Console.WriteLine("Bluetooth state read error: " + ex.Message);
+        }
+    }
+
+    private static string ExtractJsonStringValue(string content, string key)
+    {
+        try
+        {
+            string pattern = "\"" + Regex.Escape(key) + "\"\\s*:\\s*\"(?<v>(?:\\\\.|[^\\\"])*)\"";
+            Match m = Regex.Match(content, pattern, RegexOptions.CultureInvariant);
+            if (!m.Success)
+            {
+                return "";
+            }
+            return Regex.Unescape(m.Groups["v"].Value);
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     // Draws rouded rectangles, used for buttons and cards in the UI
@@ -3411,6 +3673,20 @@ public class TuioDemo : Form, TuioListener
         }
 
         return baseDir;
+    }
+
+    private static string ResolveBluetoothStatePath()
+    {
+        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        string projectState = Path.GetFullPath(Path.Combine(baseDir, "..", "..", ".runtime", "current_user.json"));
+
+        if (File.Exists(projectState) || Directory.Exists(Path.GetDirectoryName(projectState)))
+        {
+            return projectState;
+        }
+
+        string localState = Path.Combine(baseDir, ".runtime", "current_user.json");
+        return localState;
     }
     ///
 

@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "E:\HCI\Project\Smart_Shopping\bridge\hand_tuio_bridge.py", line 29, in <module>
+    from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
+ModuleNotFoundError: No module named 'mediapipe.python'
