@@ -1,16 +1,12 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Windows.Forms;
 using TUIO;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.TextBox;
 
 public class TuioDemo : Form, TuioListener
 {
@@ -45,6 +41,7 @@ public class TuioDemo : Form, TuioListener
     private string bluetoothIdentity = "";
     private readonly TimeSpan bluetoothPollInterval = TimeSpan.FromSeconds(1);
     private readonly TimeSpan loginAutoReturnDelay = TimeSpan.FromSeconds(2);
+    private AdaptiveUIController _adaptive;
 
     /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
@@ -119,6 +116,7 @@ public class TuioDemo : Form, TuioListener
     DateTime lastOutfitSelectTime = DateTime.MinValue;
 
     private System.Windows.Forms.Timer themeTimer = new System.Windows.Forms.Timer();
+    private float _baseFontSize = 12f;
 
     Font font = new Font("Arial", 10.0f);
     SolidBrush fntBrush = new SolidBrush(Color.White);
@@ -139,6 +137,7 @@ public class TuioDemo : Form, TuioListener
         this.ClientSize = new System.Drawing.Size(width, height);
         this.Name = "TuioDemo";
         this.Text = "Smart Shopping";
+        _baseFontSize = this.Font.Size;
 
         this.Closing += new CancelEventHandler(Form_Closing);
         this.KeyDown += new KeyEventHandler(Form_KeyDown);
@@ -163,6 +162,10 @@ public class TuioDemo : Form, TuioListener
         assetRootPath = ResolveAssetRootPath();
         bluetoothStatePath = ResolveBluetoothStatePath();
         themePath = Path.Combine(assetRootPath, "Light");
+
+        _adaptive = new AdaptiveUIController(this);
+        _adaptive.StateChanged += OnAdaptiveStateChanged;
+        _adaptive.Start();
 
     }
 
@@ -220,7 +223,93 @@ public class TuioDemo : Form, TuioListener
         client.removeTuioListener(this);
 
         client.disconnect();
+        _adaptive?.Dispose();
         System.Environment.Exit(0);
+    }
+
+    private void OnAdaptiveStateChanged(object sender, AdaptiveStateChangedEventArgs e)
+    {
+        switch (e.State)
+        {
+            case AdaptiveState.Confused:
+                ShowHelpOverlay(true);
+                SetFontScale(1.25f);
+                break;
+
+            case AdaptiveState.Frustrated:
+                ShowHelpOverlay(true);
+                SetFontScale(1.25f);
+                break;
+
+            case AdaptiveState.SustainedFrustration:
+                ShowHelpOverlay(true);
+                ShowAttendantButton(true);
+                NavigateToHome();
+                break;
+
+            case AdaptiveState.Engaged:
+            case AdaptiveState.Interested:
+                ShowHelpOverlay(false);
+                ShowUpsellPanel(true);
+                SetFontScale(1.0f);
+                break;
+
+            case AdaptiveState.Disengaged:
+                ShowUpsellPanel(false);
+                PlayAttractAnimation();
+                break;
+
+            case AdaptiveState.Neutral:
+            default:
+                ShowHelpOverlay(false);
+                ShowUpsellPanel(false);
+                ShowAttendantButton(false);
+                SetFontScale(1.0f);
+                break;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[AdaptiveUI] {e.Emotion} -> {e.State} (conf={e.Confidence:P0})");
+    }
+
+    private void SetFontScale(float scale)
+    {
+        this.Font = new Font(this.Font.FontFamily, _baseFontSize * scale);
+        Invalidate();
+    }
+
+    private void ShowHelpOverlay(bool visible)
+    {
+        // helpOverlayPanel.Visible = visible;
+    }
+
+    private void ShowUpsellPanel(bool visible)
+    {
+        // upsellPanel.Visible = visible;
+    }
+
+    private void ShowAttendantButton(bool visible)
+    {
+        // attendantButton.Visible = visible;
+    }
+
+    private void NavigateToHome()
+    {
+        home = true;
+        login = false;
+        clothes = false;
+        checkout = false;
+        thankyou = false;
+        bestsellers = false;
+        deals = false;
+        outfitbuilder = false;
+        loginsteps = false;
+        signupsteps = false;
+        Invalidate();
+    }
+
+    private void PlayAttractAnimation()
+    {
+        Invalidate();
     }
 
     public void addTuioObject(TuioObject o)
@@ -3391,6 +3480,20 @@ public class TuioDemo : Form, TuioListener
                         g.DrawString(tblb.BlobID + "", font, fntBrush, new PointF(bx, by));
                     }
                 }
+            }
+
+        }
+
+        // Always-on emotion badge (drawn outside any TUIO-object conditional so it shows on every page)
+        if (_adaptive != null && _adaptive.FaceDetected)
+        {
+            string badge = "😊 " + _adaptive.RawEmotion + " (" + _adaptive.Confidence.ToString("P0") + ")";
+            using (var bf = new Font("Segoe UI", 12f, FontStyle.Bold))
+            using (var bb = new SolidBrush(Color.FromArgb(180, 0, 0, 0)))
+            {
+                var sz = g.MeasureString(badge, bf);
+                g.FillRectangle(bb, 8, 8, sz.Width + 12, sz.Height + 6);
+                g.DrawString(badge, bf, Brushes.White, 14, 11);
             }
         }
     }
