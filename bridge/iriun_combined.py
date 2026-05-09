@@ -4,12 +4,10 @@ iriun_combined.py
 Single-camera bridge that runs hand tracking (TUIO) AND face emotion (JSON)
 on one Iriun camera frame stream. Solves the "two processes can't share one
 camera" limitation on Windows.
-
 Outputs:
   - TUIO /tuio/2Dcur cursors and /tuio/2Dobj swipe bursts -> UDP port (default 3333)
   - .runtime/current_emotion.json (every face_interval seconds)
   - .runtime/tuio_port.json (selected port)
-
 Run example:
   python .\bridge\iriun_combined.py --camera-index 1 --tuio-port 3333 --show-preview
 """

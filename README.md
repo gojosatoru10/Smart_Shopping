@@ -1,3 +1,4 @@
+# Smart_Shopping
 # Smart Shopping
 
 Touchless kiosk demo: **hand tracking → TUIO** drives a **C# WinForms** app (`TuioDemo`), with optional **reacTIVision** fiducials and **Bluetooth** sign-in via a small Python watcher.
@@ -143,6 +144,9 @@ py -3.9 ".\Pybluez2 Bluetooth.py"
 
 ```powershell
 py -3.9 .\bridge\hand_tuio_bridge.py --camera-index 1 --tuio-port 3333 --port-file .runtime/tuio_port.json --send-fps 30
+```
+```powershell
+py -3.9 -u .\bridge\hand_tuio_bridge.py --camera-index 0 --tuio-port 3333 --use-dshow --show-preview
 ```
 
 Useful flags: `--show-preview`, `--list-cameras`, `--wait-for-camera`, `--use-dshow`, `--tuio-port auto`, `--no-gesture`.

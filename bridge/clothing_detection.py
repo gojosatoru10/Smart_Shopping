@@ -94,7 +94,7 @@ class ClothingDetector:
         self.last_payload = payload
         write_json_atomic(self.output_path, payload)
 
-    def _best_detection(self, frame) -> Optional[Tuple[str, str, int, float]]:
+    def _best_detection(self, frame) -> Optional[Tuple[str, str, int, float, list]]:
         if self._model is None:
             return None
 
@@ -120,6 +120,7 @@ class ClothingDetector:
             try:
                 conf = float(box.conf[0].item())
                 cls_id = int(box.cls[0].item())
+                xyxy = box.xyxy[0].tolist()  # [x1, y1, x2, y2]
             except Exception:
                 continue
 
@@ -129,10 +130,12 @@ class ClothingDetector:
                 continue
             if conf > best_conf:
                 best_conf = conf
-                best = (label, mapped[0], mapped[1], conf)
+                # Convert xyxy to xywh for drawing
+                x1, y1, x2, y2 = xyxy
+                box_xywh = [int(x1), int(y1), int(x2 - x1), int(y2 - y1)]
+                best = (label, mapped[0], mapped[1], conf, box_xywh)
 
         return best
-
     def process_frame(self, frame, now_ts: Optional[float] = None) -> Optional[Dict[str, Any]]:
         now = float(now_ts if now_ts is not None else time.time())
         if now - self._last_infer_ts < self.interval_sec:
@@ -147,17 +150,18 @@ class ClothingDetector:
             self._write_status("no_detection")
             return self.last_payload
 
-        raw_label, category, category_index, confidence = best
+        raw_label, category, category_index, confidence, box_xywh = best
         if confidence < self.min_confidence:
             self._write_status("no_detection", confidence=round(confidence, 4), label=raw_label)
             return self.last_payload
-
+        
         payload = {
             "status": "detected",
             "label": raw_label,
             "category": category,
             "category_index": category_index,
             "confidence": round(confidence, 4),
+            "box": box_xywh,
             "timestamp": datetime.utcnow().isoformat() + "Z",
         }
         self.last_payload = payload

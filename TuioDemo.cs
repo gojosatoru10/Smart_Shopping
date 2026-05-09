@@ -166,7 +166,7 @@ public class TuioDemo : Form, TuioListener
         _adaptive = new AdaptiveUIController(this);
         _adaptive.StateChanged += OnAdaptiveStateChanged;
         _adaptive.Start();
-
+//
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -2571,7 +2571,6 @@ public class TuioDemo : Form, TuioListener
                 }
             }
         }
-
         // draw the objects
         if (objectList.Count > 0)
         {

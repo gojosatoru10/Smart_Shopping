@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Realtime hand tracking to TUIO bridge.
-
 Sends /tuio/2Dcur for hand cursors and /tuio/2Dobj for synthesized navigation (SymbolID 1)
 when swipe gestures are detected, matching TuioDemo.cs page-switching logic.
-
 Preview: MediaPipe hand landmarks (skeleton) plus fingertip dot + sid label when --show-preview.
-
 Requires: Python 3.9+, mediapipe with solutions API (e.g. mediapipe==0.10.21), opencv-python,
 dollarpy, python-osc, torch (optional for .pth load).
 """
 
 from __future__ import annotations
+
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 
 import argparse
 import json
@@ -750,6 +750,28 @@ def main() -> int:
                 if clothing_detector is not None:
                     latest = clothing_detector.last_payload
                     if latest.get("status") == "detected":
+                        # Draw bounding box
+                        box = latest.get("box")
+                        if box is not None:
+                            try:
+                                bx, by, bw, bh = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+                                cv2.rectangle(frame, (bx, by), (bx + bw, by + bh), (0, 255, 255), 2)
+                                label_txt = f"{latest.get('category')} {float(latest.get('confidence', 0.0)):.2f}"
+                                (tw, th), _ = cv2.getTextSize(label_txt, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                                cv2.rectangle(frame, (bx, by - th - 8), (bx + tw + 6, by), (0, 255, 255), -1)
+                                cv2.putText(
+                                    frame,
+                                    label_txt,
+                                    (bx + 3, by - 5),
+                                    cv2.FONT_HERSHEY_SIMPLEX,
+                                    0.6,
+                                    (0, 0, 0),
+                                    2,
+                                    cv2.LINE_AA,
+                                )
+                            except Exception:
+                                pass
+                        # Status text top-left
                         txt = f"clothing: {latest.get('category')} ({float(latest.get('confidence', 0.0)):.2f})"
                     else:
                         txt = f"clothing: {latest.get('status', 'n/a')}"
