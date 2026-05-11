@@ -1,16 +1,16 @@
 {
   "emotion": "neutral",
-  "confidence": 0.0,
+  "confidence": 0.6679,
   "adaptive_hint": "neutral",
-  "face_detected": false,
+  "face_detected": true,
   "scores": {
-    "angry": 0.0,
+    "angry": 0.0205,
     "disgust": 0.0,
-    "fear": 0.0,
-    "happy": 0.0,
-    "sad": 0.0,
+    "fear": 0.0001,
+    "happy": 0.2892,
+    "sad": 0.0188,
     "surprise": 0.0,
-    "neutral": 0.0
+    "neutral": 0.6679
   },
-  "timestamp": "2026-05-06T18:32:59.844894Z"
+  "timestamp": "2026-05-11T20:05:34.434963Z"
 }

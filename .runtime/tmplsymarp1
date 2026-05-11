@@ -3,7 +3,7 @@
   "username": "",
   "mac": "",
   "connected_at": 0,
-  "generated_at": 1778529929,
+  "generated_at": 1778332265,
   "source": "pybluez2",
   "selection_reason": "no allowed connected device"
 }

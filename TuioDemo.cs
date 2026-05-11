@@ -42,6 +42,14 @@ public class TuioDemo : Form, TuioListener
     private readonly TimeSpan bluetoothPollInterval = TimeSpan.FromSeconds(1);
     private readonly TimeSpan loginAutoReturnDelay = TimeSpan.FromSeconds(2);
     private AdaptiveUIController _adaptive;
+    private FaceRecognitionController _faceRecognition;
+    
+    // Face recognition state
+    private string recognizedUser = "";
+    private string recognizedGender = "";
+    private DateTime loginSuccessTime = DateTime.MinValue;
+    private bool showWelcomeMessage = false;
+    private bool waitingToNavigateHome = false;
 
     /// Represents the current theme path, which can be switched between Light and Dark themes based on user interactions.
     public string themePath;
@@ -81,13 +89,68 @@ public class TuioDemo : Form, TuioListener
     int[] scrollIndices = new int[5] { 0, 0, 0, 0, 0 };
 
     // --- Item Arrays for Outfit Builder ---
-    string[][] items = {
+    // Male items (default)
+    string[][] maleItems = {
     new string[] { "BlackShirt", "BrownShirt", "BurgundyShirt", "DarkBlueShirt", "NavyShirt", "PinkShirt", "PrintedShirt", "WhiteShirt" },
     new string[] { "BlackHoodie", "BurgundyHoodie", "DarkGreyHoodie", "GreenHoodie", "GreyHoodie", "LightBlueHoodie", "OffWhiteHoodie", "PinkHoodie" },
     new string[] { "BlackJacket", "BrownFurJacket", "BrownJacket", "DenimFurJacket", "DenimJacket", "FadedJacket", "GreyBuffyJacket", "GreyJacket" },
     new string[] { "BlackCargoPants", "BlueDenimPants", "BlackPants", "DenimCargoPants", "DenimPants", "FadedDenimPants", "GreyCargoPants", "NavyDenimPants" },
-    new string[] { "BlackShorts", "BlueShorts", "GreyDenimShorts", "GreyShorts", "LightDenimShorts", "NavyDenimShorts", "WhiteShorts" }
+    new string[] { "BeigeShorts", "BlackShorts", "BlueShorts", "GreyDenimShorts", "GreyShorts", "LightDenimShorts", "NavyDenimShorts", "WhiteShorts" }
 };
+
+    // Female items (dresses and skirts instead of shirts and shorts)
+    string[][] femaleItems = {
+    new string[] { "blackdress", "red_yellow dress", "yellowdress", "darkbluedress", "lightbluedress", "reddress", "flowerdress", "whitedress" },
+    new string[] { "BlackHoodie", "BurgundyHoodie", "DarkGreyHoodie", "GreenHoodie", "GreyHoodie", "LightBlueHoodie", "OffWhiteHoodie", "PinkHoodie" },
+    new string[] { "BlackJacket", "BrownFurJacket", "BrownJacket", "DenimFurJacket", "DenimJacket", "FadedJacket", "GreyBuffyJacket", "GreyJacket" },
+    new string[] { "BlackCargoPants", "BlueDenimPants", "BlackPants", "DenimCargoPants", "DenimPants", "FadedDenimPants", "GreyCargoPants", "NavyDenimPants" },
+    new string[] { "blackskirt", "lightblueskirt", "greenskirt", "darkblueskirt", "pinkskirt", "whiteskirt", "purpleskirt", "brownskirt" }
+};
+
+    // Method to get the appropriate items array based on gender
+    private string[][] GetItems()
+    {
+        Console.WriteLine($"[GetItems] recognizedGender = '{recognizedGender}'");
+        bool isFemale = (recognizedGender == "female");
+        Console.WriteLine($"[GetItems] Returning {(isFemale ? "femaleItems" : "maleItems")}");
+        return isFemale ? femaleItems : maleItems;
+    }
+
+    // Helper method to get gender-appropriate clothing image
+    private string GetGenderAppropriateImage(string imageName)
+    {
+        // If user is female, replace shirt images with dress images and shorts with skirts
+        if (recognizedGender == "female")
+        {
+            switch (imageName)
+            {
+                // Shirts -> Dresses
+                case "DarkBlueShirt.png": return "darkbluedress.png";
+                case "NavyShirt.png": return "lightbluedress.png";
+                case "BlackShirt.png": return "blackdress.png";
+                case "PrintedShirt.png": return "flowerdress.png";
+                case "PinkShirt.png": return "reddress.png";
+                case "BurgundyShirt.png": return "yellowdress.png";
+                case "BrownShirt.png": return "red_yellow dress.png";
+                case "WhiteShirt.png": return "whitedress.png";
+                case "Shirt.png": return "dress.png";  // Category icon
+                
+                // Shorts -> Skirts
+                case "BlackShorts.png": return "blackskirt.png";
+                case "BlueShorts.png": return "lightblueskirt.png";
+                case "BeigeShorts.png": return "brownskirt.png";
+                case "GreyDenimShorts.png": return "greenskirt.png";
+                case "GreyShorts.png": return "darkblueskirt.png";
+                case "LightDenimShorts.png": return "pinkskirt.png";
+                case "NavyDenimShorts.png": return "whiteskirt.png";
+                case "WhiteShorts.png": return "purpleskirt.png";
+                case "Shorts.png": return "skirt.png";  // Category icon
+                
+                default: return imageName;
+            }
+        }
+        return imageName;
+    }
 
     /// <summary>
     /// Using the Time of the last switch and a cooldown to prevent multiple switches from one rotation, as the TUIO objects can update very quickly and we only want one switch per rotation.
@@ -167,6 +230,10 @@ public class TuioDemo : Form, TuioListener
         _adaptive.StateChanged += OnAdaptiveStateChanged;
         _adaptive.Start();
 
+        _faceRecognition = new FaceRecognitionController(this);
+        _faceRecognition.LoginSuccess += OnFaceLoginSuccess;
+        _faceRecognition.Start();
+
     }
 
     private void Form_KeyDown(object sender, System.Windows.Forms.KeyEventArgs e)
@@ -224,6 +291,7 @@ public class TuioDemo : Form, TuioListener
 
         client.disconnect();
         _adaptive?.Dispose();
+        _faceRecognition?.Dispose();
         System.Environment.Exit(0);
     }
 
@@ -271,6 +339,37 @@ public class TuioDemo : Form, TuioListener
         System.Diagnostics.Debug.WriteLine($"[AdaptiveUI] {e.Emotion} -> {e.State} (conf={e.Confidence:P0})");
     }
 
+    private void OnFaceLoginSuccess(object sender, FaceLoginSuccessEventArgs e)
+    {
+        // User successfully logged in via face recognition
+        recognizedUser = e.PersonName;
+        recognizedGender = e.Gender;
+        loginSuccessTime = DateTime.Now;
+        showWelcomeMessage = true;
+        waitingToNavigateHome = true;
+        
+        System.Diagnostics.Debug.WriteLine($"[FaceLogin] Welcome {recognizedUser} ({recognizedGender})");
+        
+        // Disable login mode
+        _faceRecognition.DisableLoginMode();
+        
+        // Wait 3 seconds before navigating to home
+        System.Threading.Tasks.Task.Delay(3000).ContinueWith(_ => {
+            if (this.InvokeRequired)
+                this.Invoke(new Action(() => {
+                    waitingToNavigateHome = false;
+                    NavigateToHome();
+                }));
+            else
+            {
+                waitingToNavigateHome = false;
+                NavigateToHome();
+            }
+        });
+        
+        Invalidate();
+    }
+
     private void SetFontScale(float scale)
     {
         this.Font = new Font(this.Font.FontFamily, _baseFontSize * scale);
@@ -304,6 +403,42 @@ public class TuioDemo : Form, TuioListener
         outfitbuilder = false;
         loginsteps = false;
         signupsteps = false;
+        
+        // Disable face recognition when leaving login
+        if (_faceRecognition != null && _faceRecognition.LoginModeActive)
+        {
+            _faceRecognition.DisableLoginMode();
+        }
+        
+        Invalidate();
+    }
+    
+    private void NavigateToLogin()
+    {
+        System.Diagnostics.Debug.WriteLine("[Navigation] NavigateToLogin() called");
+        
+        home = false;
+        login = true;
+        clothes = false;
+        checkout = false;
+        thankyou = false;
+        bestsellers = false;
+        deals = false;
+        outfitbuilder = false;
+        loginsteps = false;
+        signupsteps = false;
+        
+        // Enable face recognition when entering login
+        if (_faceRecognition != null)
+        {
+            System.Diagnostics.Debug.WriteLine("[Navigation] Calling EnableLoginMode()");
+            _faceRecognition.EnableLoginMode();
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine("[Navigation] ERROR: _faceRecognition is NULL!");
+        }
+        
         Invalidate();
     }
 
@@ -616,6 +751,27 @@ public class TuioDemo : Form, TuioListener
                     SizeF textSize = g.MeasureString(titles[i], textFont);
                     g.DrawString(titles[i], textFont, textBrush, cardRect.X + (cardWidth - textSize.Width) / 2, cardRect.Y + cardHeight * 0.75f);
                 }
+                
+                // Draw Welcome Message above Deals card (middle card, index 1)
+                if (showWelcomeMessage && !string.IsNullOrEmpty(recognizedUser))
+                {
+                    float dealsCardX = startX + 1 * (cardWidth + spacing);
+                    float welcomeY = baseY - 80;
+                    
+                    string welcomeText = $"Welcome {recognizedUser}!";
+                    Font welcomeFont = new Font("Segoe UI", 28f, FontStyle.Bold);
+                    
+                    // Measure text for centering
+                    SizeF welcomeSize = g.MeasureString(welcomeText, welcomeFont);
+                    float welcomeX = dealsCardX + (cardWidth - welcomeSize.Width) / 2;
+                    
+                    // Draw shadow
+                    g.DrawString(welcomeText, welcomeFont, new SolidBrush(shadowColor), welcomeX + 3, welcomeY + 3);
+                    
+                    // Draw main text
+                    Brush welcomeBrush = dark ? Brushes.Gold : Brushes.DarkGoldenrod;
+                    g.DrawString(welcomeText, welcomeFont, welcomeBrush, welcomeX, welcomeY);
+                }
             }
             catch (Exception ex) { Console.WriteLine("Error: " + ex.Message); }
         }
@@ -652,34 +808,89 @@ public class TuioDemo : Form, TuioListener
                 }
                 catch { }
 
+                // Check if user is already logged in
+                if (!string.IsNullOrEmpty(recognizedUser) && !waitingToNavigateHome)
+                {
+                    // User is already logged in - show message instead of login options
+                    Color cardColor = dark ? Color.FromArgb(130, 130, 130) : Color.FromArgb(235, 215, 160);
+                    Color shadowColor = dark ? Color.FromArgb(70, 70, 70) : Color.FromArgb(180, 160, 110);
+                    Brush textBrush = dark ? Brushes.White : Brushes.Black;
+                    
+                    float messageCardWidth = cw * 0.45f;
+                    float messageCardHeight = 150f;
+                    float messageCardX = (cw - messageCardWidth) / 2;
+                    float messageCardY = ch * 0.40f;
+                    
+                    RectangleF messageRect = new RectangleF(messageCardX, messageCardY, messageCardWidth, messageCardHeight);
+                    RectangleF messageShadowRect = new RectangleF(messageCardX + 10, messageCardY + 10, messageCardWidth, messageCardHeight);
+                    
+                    // Draw shadow
+                    using (GraphicsPath shadowPath = RoundedRect(messageShadowRect, 30))
+                        g.FillPath(new SolidBrush(shadowColor), shadowPath);
+                    
+                    // Draw card with success color
+                    Color successColor = dark ? Color.FromArgb(80, 150, 80) : Color.FromArgb(200, 240, 200);
+                    using (GraphicsPath cardPath = RoundedRect(messageRect, 30))
+                    {
+                        g.FillPath(new SolidBrush(successColor), cardPath);
+                        g.DrawPath(new Pen(dark ? Color.LightGreen : Color.DarkGreen, 3), cardPath);
+                    }
+                    
+                    // Draw checkmark icon
+                    using (Font iconFont = new Font("Segoe UI", 40, FontStyle.Bold))
+                    {
+                        string checkmark = "✓";
+                        SizeF checkSize = g.MeasureString(checkmark, iconFont);
+                        g.DrawString(checkmark, iconFont, new SolidBrush(dark ? Color.LightGreen : Color.DarkGreen), 
+                            messageCardX + (messageCardWidth - checkSize.Width) / 2, messageCardY + 15);
+                    }
+                    
+                    // Draw message text
+                    using (Font messageFont = new Font("Segoe UI", 18, FontStyle.Bold))
+                    {
+                        string line1 = "Already Logged In";
+                        string line2 = $"Welcome back, {recognizedUser}!";
+                        
+                        SizeF size1 = g.MeasureString(line1, messageFont);
+                        SizeF size2 = g.MeasureString(line2, messageFont);
+                        
+                        g.DrawString(line1, messageFont, textBrush, 
+                            messageCardX + (messageCardWidth - size1.Width) / 2, messageCardY + 75);
+                        g.DrawString(line2, messageFont, textBrush, 
+                            messageCardX + (messageCardWidth - size2.Width) / 2, messageCardY + 105);
+                    }
+                    
+                    return; // Exit early - don't draw login circles
+                }
+
                 // 3. Setup Colors (Matching your Login.jpg screenshot)
                 Color circleColor;
-                Color shadowColor;
+                Color shadowColor2;
                 if (dark)
                 {
                     circleColor = Color.FromArgb(130, 130, 130); // Using dark grey
-                    shadowColor = Color.FromArgb(70, 70, 70);
+                    shadowColor2 = Color.FromArgb(70, 70, 70);
                 }
                 else
                 {
                     circleColor = Color.FromArgb(235, 215, 160); // Using creamy color 
-                    shadowColor = Color.FromArgb(190, 170, 120);
+                    shadowColor2 = Color.FromArgb(190, 170, 120);
                 }
 
                 Color selectionColor;
-                Brush textBrush;
+                Brush textBrush2;
                 if (dark)
                 {
                     selectionColor = Color.White;
-                    textBrush = Brushes.White;
+                    textBrush2 = Brushes.White;
                 }
                 else
                 {
                     selectionColor = Color.FromArgb(100, 70, 40);
-                    textBrush = Brushes.Black;
+                    textBrush2 = Brushes.Black;
                 }
                 Brush circleBrush = new SolidBrush(circleColor);
-                Brush shadowBrush = new SolidBrush(shadowColor);
+                Brush shadowBrush = new SolidBrush(shadowColor2);
                 Font loginFont = new Font("Vladimir Script", 66f, FontStyle.Regular);
 
                 // 4. Position Circles
@@ -750,20 +961,50 @@ public class TuioDemo : Form, TuioListener
                     SizeF textSize = g.MeasureString(labels[i], loginFont);
                     float tx = x + (circleSize - textSize.Width) / 2;
                     float ty = y + (circleSize - textSize.Height) / 2;
-                    g.DrawString(labels[i], loginFont, textBrush, tx, ty);
+                    g.DrawString(labels[i], loginFont, textBrush2, tx, ty);
                 }
 
                 using (Font statusFont = new Font("Segoe UI", 22f, FontStyle.Bold))
-                using (Font hintFont = new Font("Segoe UI", 14f, FontStyle.Regular))
+using (Font hintFont = new Font("Segoe UI", 14f, FontStyle.Regular))
                 {
                     string headline;
                     string subline;
 
-                    if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
+                    // Priority 0: Waiting to navigate home after successful login
+                    if (waitingToNavigateHome)
+                    {
+                        headline = "✓ Face detected!";
+                        subline = "Going back to home page...";
+                    }
+                    // Priority 1: Face Recognition (if active and detecting)
+                    else if (_faceRecognition != null && _faceRecognition.LoginModeActive)
+                    {
+                        if (_faceRecognition.FaceDetected)
+                        {
+                            if (_faceRecognition.RecognizedPerson != "unknown" && _faceRecognition.RecognitionConfidence >= 0.6f)
+                            {
+                                headline = "Recognizing " + _faceRecognition.RecognizedPerson + "...";
+                                subline = String.Format("Confidence: {0:P0} - Logging you in...", _faceRecognition.RecognitionConfidence);
+                            }
+                            else
+                            {
+                                headline = "Face detected - Looking at camera...";
+                                subline = "Hold still for recognition or use manual login below";
+                            }
+                        }
+                        else
+                        {
+                            headline = "Please look at the camera";
+                            subline = "Face recognition active - or use manual login below";
+                        }
+                    }
+                    // Priority 2: Bluetooth (if signed in)
+                    else if (bluetoothSigninStatus == "signed_in" && !string.IsNullOrWhiteSpace(bluetoothUsername))
                     {
                         headline = "Detected user: " + bluetoothUsername;
                         subline = "Returning to Home in 2 seconds...";
                     }
+                    // Priority 3: Bluetooth status messages
                     else
                     {
                         headline = loginStatusMessage;
@@ -778,12 +1019,12 @@ public class TuioDemo : Form, TuioListener
                     SizeF headlineSize = g.MeasureString(headline, statusFont);
                     float headlineX = (cw - headlineSize.Width) / 2;
                     float headlineY = ch * 0.85f;
-                    g.DrawString(headline, statusFont, textBrush, headlineX, headlineY);
+                    g.DrawString(headline, statusFont, textBrush2, headlineX, headlineY);
 
                     SizeF sublineSize = g.MeasureString(subline, hintFont);
                     float sublineX = (cw - sublineSize.Width) / 2;
                     float sublineY = headlineY + headlineSize.Height + 8;
-                    g.DrawString(subline, hintFont, textBrush, sublineX, sublineY);
+                    g.DrawString(subline, hintFont, textBrush2, sublineX, sublineY);
                 }
             }
             catch (Exception ex)
@@ -1000,76 +1241,128 @@ public class TuioDemo : Form, TuioListener
                     textBrush = Brushes.Black;
                 }
 
-                // Card dimensions - same style as home page
-                float cardWidth = cw * 0.28f;
-                float cardHeight = 90f;
-                float cardX = (cw - cardWidth) / 2;
-
-                // Card 1: Open Your Bluetooth
-                float card1Y = ch * 0.28f;
-                RectangleF card1Rect = new RectangleF(cardX, card1Y, cardWidth, cardHeight);
-                RectangleF shadow1Rect = new RectangleF(cardX + 10, card1Y + 10, cardWidth, cardHeight);
-
-                using (GraphicsPath shadow1Path = RoundedRect(shadow1Rect, 30))
-                    g.FillPath(new SolidBrush(shadowColor), shadow1Path);
-                using (GraphicsPath card1Path = RoundedRect(card1Rect, 30))
+                // Check if user is already logged in
+                if (!string.IsNullOrEmpty(recognizedUser))
                 {
-                    g.FillPath(new SolidBrush(cardColor), card1Path);
-                    g.DrawPath(new Pen(Color.White, 2), card1Path);
+                    // User is already logged in - show message instead of signup steps
+                    float messageCardWidth = cw * 0.45f;
+                    float messageCardHeight = 150f;
+                    float messageCardX = (cw - messageCardWidth) / 2;
+                    float messageCardY = ch * 0.40f;
+                    
+                    RectangleF messageRect = new RectangleF(messageCardX, messageCardY, messageCardWidth, messageCardHeight);
+                    RectangleF messageShadowRect = new RectangleF(messageCardX + 10, messageCardY + 10, messageCardWidth, messageCardHeight);
+                    
+                    // Draw shadow
+                    using (GraphicsPath shadowPath = RoundedRect(messageShadowRect, 30))
+                        g.FillPath(new SolidBrush(shadowColor), shadowPath);
+                    
+                    // Draw card with success color
+                    Color successColor = dark ? Color.FromArgb(80, 150, 80) : Color.FromArgb(200, 240, 200);
+                    using (GraphicsPath cardPath = RoundedRect(messageRect, 30))
+                    {
+                        g.FillPath(new SolidBrush(successColor), cardPath);
+                        g.DrawPath(new Pen(dark ? Color.LightGreen : Color.DarkGreen, 3), cardPath);
+                    }
+                    
+                    // Draw checkmark icon
+                    using (Font iconFont = new Font("Segoe UI", 40, FontStyle.Bold))
+                    {
+                        string checkmark = "✓";
+                        SizeF checkSize = g.MeasureString(checkmark, iconFont);
+                        g.DrawString(checkmark, iconFont, new SolidBrush(dark ? Color.LightGreen : Color.DarkGreen), 
+                            messageCardX + (messageCardWidth - checkSize.Width) / 2, messageCardY + 15);
+                    }
+                    
+                    // Draw message text
+                    using (Font messageFont = new Font("Segoe UI", 18, FontStyle.Bold))
+                    {
+                        string line1 = "Face Detected & Signed In";
+                        string line2 = $"Welcome, {recognizedUser}!";
+                        
+                        SizeF size1 = g.MeasureString(line1, messageFont);
+                        SizeF size2 = g.MeasureString(line2, messageFont);
+                        
+                        g.DrawString(line1, messageFont, textBrush, 
+                            messageCardX + (messageCardWidth - size1.Width) / 2, messageCardY + 75);
+                        g.DrawString(line2, messageFont, textBrush, 
+                            messageCardX + (messageCardWidth - size2.Width) / 2, messageCardY + 105);
+                    }
                 }
-                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                else
                 {
-                    string txt1 = "Open Your Bluetooth";
-                    SizeF sz1 = g.MeasureString(txt1, cardFont);
-                    g.DrawString(txt1, cardFont, textBrush, cardX + (cardWidth - sz1.Width) / 2, card1Y + (cardHeight - sz1.Height) / 2);
+                    // User not logged in - show normal signup steps
+                    // Card dimensions - same style as home page
+                    float cardWidth = cw * 0.28f;
+                    float cardHeight = 90f;
+                    float cardX = (cw - cardWidth) / 2;
+
+                    // Card 1: Open Your Bluetooth
+                    float card1Y = ch * 0.28f;
+                    RectangleF card1Rect = new RectangleF(cardX, card1Y, cardWidth, cardHeight);
+                    RectangleF shadow1Rect = new RectangleF(cardX + 10, card1Y + 10, cardWidth, cardHeight);
+
+                    using (GraphicsPath shadow1Path = RoundedRect(shadow1Rect, 30))
+                        g.FillPath(new SolidBrush(shadowColor), shadow1Path);
+                    using (GraphicsPath card1Path = RoundedRect(card1Rect, 30))
+                    {
+                        g.FillPath(new SolidBrush(cardColor), card1Path);
+                        g.DrawPath(new Pen(Color.White, 2), card1Path);
+                    }
+                    using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                    {
+                        string txt1 = "Open Your Bluetooth";
+                        SizeF sz1 = g.MeasureString(txt1, cardFont);
+                        g.DrawString(txt1, cardFont, textBrush, cardX + (cardWidth - sz1.Width) / 2, card1Y + (cardHeight - sz1.Height) / 2);
+                    }
+
+                    // Card 2: Pair to DELLG15
+                    float card2Y = ch * 0.45f;
+                    RectangleF card2Rect = new RectangleF(cardX, card2Y, cardWidth, cardHeight);
+                    RectangleF shadow2Rect = new RectangleF(cardX + 10, card2Y + 10, cardWidth, cardHeight);
+
+                    using (GraphicsPath shadow2Path = RoundedRect(shadow2Rect, 30))
+                        g.FillPath(new SolidBrush(shadowColor), shadow2Path);
+                    using (GraphicsPath card2Path = RoundedRect(card2Rect, 30))
+                    {
+                        g.FillPath(new SolidBrush(cardColor), card2Path);
+                        g.DrawPath(new Pen(Color.White, 2), card2Path);
+                    }
+                    using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                    {
+                        string txt2 = "Pair to DELLG15";
+                        SizeF sz2 = g.MeasureString(txt2, cardFont);
+                        g.DrawString(txt2, cardFont, textBrush, cardX + (cardWidth - sz2.Width) / 2, card2Y + (cardHeight - sz2.Height) / 2);
+                    }
+
+                    // Card 3: Accept Connection Request
+                    float card3Y = ch * 0.62f;
+                    float card3Height = cardHeight + 20;
+                    RectangleF card3Rect = new RectangleF(cardX, card3Y, cardWidth, card3Height);
+                    RectangleF shadow3Rect = new RectangleF(cardX + 10, card3Y + 10, cardWidth, card3Height);
+
+                    using (GraphicsPath shadow3Path = RoundedRect(shadow3Rect, 30))
+                        g.FillPath(new SolidBrush(shadowColor), shadow3Path);
+                    using (GraphicsPath card3Path = RoundedRect(card3Rect, 30))
+                    {
+                        g.FillPath(new SolidBrush(cardColor), card3Path);
+                        g.DrawPath(new Pen(Color.White, 2), card3Path);
+                    }
+                    using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
+                    {
+                        string txt3Line1 = "Accept Connection";
+                        string txt3Line2 = "Request";
+                        SizeF sz3a = g.MeasureString(txt3Line1, cardFont);
+                        SizeF sz3b = g.MeasureString(txt3Line2, cardFont);
+                        float lineHeight = sz3a.Height;
+                        float totalHeight = lineHeight * 2;
+                        float startY = card3Y + (card3Height - totalHeight) / 2;
+                        g.DrawString(txt3Line1, cardFont, textBrush, cardX + (cardWidth - sz3a.Width) / 2, startY);
+                        g.DrawString(txt3Line2, cardFont, textBrush, cardX + (cardWidth - sz3b.Width) / 2, startY + lineHeight);
+                    }
                 }
 
-                // Card 2: Pair to DELLG15
-                float card2Y = ch * 0.45f;
-                RectangleF card2Rect = new RectangleF(cardX, card2Y, cardWidth, cardHeight);
-                RectangleF shadow2Rect = new RectangleF(cardX + 10, card2Y + 10, cardWidth, cardHeight);
-
-                using (GraphicsPath shadow2Path = RoundedRect(shadow2Rect, 30))
-                    g.FillPath(new SolidBrush(shadowColor), shadow2Path);
-                using (GraphicsPath card2Path = RoundedRect(card2Rect, 30))
-                {
-                    g.FillPath(new SolidBrush(cardColor), card2Path);
-                    g.DrawPath(new Pen(Color.White, 2), card2Path);
-                }
-                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
-                {
-                    string txt2 = "Pair to DELLG15";
-                    SizeF sz2 = g.MeasureString(txt2, cardFont);
-                    g.DrawString(txt2, cardFont, textBrush, cardX + (cardWidth - sz2.Width) / 2, card2Y + (cardHeight - sz2.Height) / 2);
-                }
-
-                // Card 3: Accept Connection Request
-                float card3Y = ch * 0.62f;
-                float card3Height = cardHeight + 20;
-                RectangleF card3Rect = new RectangleF(cardX, card3Y, cardWidth, card3Height);
-                RectangleF shadow3Rect = new RectangleF(cardX + 10, card3Y + 10, cardWidth, card3Height);
-
-                using (GraphicsPath shadow3Path = RoundedRect(shadow3Rect, 30))
-                    g.FillPath(new SolidBrush(shadowColor), shadow3Path);
-                using (GraphicsPath card3Path = RoundedRect(card3Rect, 30))
-                {
-                    g.FillPath(new SolidBrush(cardColor), card3Path);
-                    g.DrawPath(new Pen(Color.White, 2), card3Path);
-                }
-                using (Font cardFont = new Font("Segoe UI", 20, FontStyle.Regular))
-                {
-                    string txt3Line1 = "Accept Connection";
-                    string txt3Line2 = "Request";
-                    SizeF sz3a = g.MeasureString(txt3Line1, cardFont);
-                    SizeF sz3b = g.MeasureString(txt3Line2, cardFont);
-                    float lineHeight = sz3a.Height;
-                    float totalHeight = lineHeight * 2;
-                    float startY = card3Y + (card3Height - totalHeight) / 2;
-                    g.DrawString(txt3Line1, cardFont, textBrush, cardX + (cardWidth - sz3a.Width) / 2, startY);
-                    g.DrawString(txt3Line2, cardFont, textBrush, cardX + (cardWidth - sz3b.Width) / 2, startY + lineHeight);
-                }
-
-                // === BACK BUTTON (ID 10) ===
+                // === BACK BUTTON (ID 10) - Always show ===
                 float backBtnSize = 70f;
                 float margin = 30f;
                 RectangleF backRect = new RectangleF(cw - backBtnSize - margin, margin, backBtnSize, backBtnSize);
@@ -1451,7 +1744,8 @@ public class TuioDemo : Form, TuioListener
                     // D. Draw Product Image
                     try
                     {
-                        using (Bitmap imgg = new Bitmap(Path.Combine(themePath, currentItemFile)))
+                        string imageFile = GetGenderAppropriateImage(currentItemFile);
+                        using (Bitmap imgg = new Bitmap(Path.Combine(themePath, imageFile)))
                             g.DrawImage(imgg, x, y - 10, cardWidth, cardHeight + 20);
                     }
                     catch { }
@@ -1756,7 +2050,8 @@ public class TuioDemo : Form, TuioListener
                     // E. Product Image
                     try
                     {
-                        using (Bitmap imgg = new Bitmap(Path.Combine(themePath, currentItemFile)))
+                        string imageFile = GetGenderAppropriateImage(currentItemFile);
+                        using (Bitmap imgg = new Bitmap(Path.Combine(themePath, imageFile)))
                             g.DrawImage(imgg, x + 10, y + 10, cardWidth - 20, cardHeight - 20);
                     }
                     catch { }
@@ -2123,6 +2418,19 @@ public class TuioDemo : Form, TuioListener
                 // === RIGHT PART: CATEGORY CARD ===
                 string[] catNames = { "Shirts", "Hoodies", "Jackets", "Pants", "Shorts" };
                 string[] catIcons = { "Shirt.png", "Hoodie.png", "Jacket.png", "Pants.png", "Shorts.png" };
+                
+                // Apply gender-appropriate names and icons
+                if (recognizedGender == "female")
+                {
+                    catNames[0] = "Dresses";  // Change "Shirts" to "Dresses"
+                    catNames[4] = "Skirts";   // Change "Shorts" to "Skirts"
+                    Console.WriteLine("[OutfitBuilder] Female user detected - changed category names");
+                }
+                
+                for (int i = 0; i < catIcons.Length; i++)
+                {
+                    catIcons[i] = GetGenderAppropriateImage(catIcons[i]);
+                }
 
                 if (selectedMenuCategory >= 0 && selectedMenuCategory < 5)
                 {
@@ -2132,8 +2440,10 @@ public class TuioDemo : Form, TuioListener
                     RectangleF catRect = new RectangleF(catCardX, 80, cardSize, cardSize);
 
                     bool isScrolling = HasObjectWithSymbolID(11);
-                    int itemIdx = Math.Abs(scrollIndices[catIdx]) % items[catIdx].Length;
-                    string displayedItem = items[catIdx][itemIdx];
+                    string[][] currentItems = GetItems();  // Get gender-appropriate items
+                    int itemIdx = Math.Abs(scrollIndices[catIdx]) % currentItems[catIdx].Length;
+                    string displayedItem = currentItems[catIdx][itemIdx];
+                    Console.WriteLine($"[OutfitBuilder] Category {catIdx} ({catNames[catIdx]}): displaying '{displayedItem}'");
 
                     g.FillPath(new SolidBrush(shadowCol), RoundedRect(new RectangleF(catRect.X + 12, catRect.Y + 12, cardSize, cardSize), 25));
 
@@ -2169,7 +2479,8 @@ public class TuioDemo : Form, TuioListener
                     g.DrawString(catNames[catIdx], new Font("Segoe UI", 16, FontStyle.Bold), textBrush, catRect.X + 20, catRect.Y + 20);
                     try
                     {
-                        using (Bitmap img = new Bitmap(Path.Combine(themePath, displayedItem + ".png")))
+                        string itemImageName = displayedItem + ".png";
+                        using (Bitmap img = new Bitmap(Path.Combine(themePath, itemImageName)))
                             g.DrawImage(img, catRect.X + 40, catRect.Y + 60, cardSize - 80, cardSize - 120);
                     }
                     catch { }
@@ -2805,21 +3116,22 @@ public class TuioDemo : Form, TuioListener
                                 if ((DateTime.Now - lastScrollTime).TotalMilliseconds > 350)
                                 {
                                     int oldIdx = scrollIndices[catIdx];
+                                    string[][] currentItems = GetItems();  // Get gender-appropriate items
 
                                     // Rotate Right
                                     if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120)
                                     {
-                                        scrollIndices[catIdx] = (scrollIndices[catIdx] + 1) % items[catIdx].Length;
+                                        scrollIndices[catIdx] = (scrollIndices[catIdx] + 1) % currentItems[catIdx].Length;
                                     }
                                     // Rotate Left
                                     else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340)
                                     {
-                                        scrollIndices[catIdx] = (scrollIndices[catIdx] - 1 + items[catIdx].Length) % items[catIdx].Length;
+                                        scrollIndices[catIdx] = (scrollIndices[catIdx] - 1 + currentItems[catIdx].Length) % currentItems[catIdx].Length;
                                     }
 
                                     if (oldIdx != scrollIndices[catIdx])
                                     {
-                                        hoodieColor = items[catIdx][scrollIndices[catIdx]];
+                                        hoodieColor = currentItems[catIdx][scrollIndices[catIdx]];
                                         lastScrollTime = DateTime.Now;
                                     }
                                 }
@@ -3216,18 +3528,22 @@ public class TuioDemo : Form, TuioListener
                             {
                                 if (home == true)
                                 {
-                                    home = false;
-                                    login = true;
+                                    NavigateToLogin();
                                 }
                                 else if (login == true)
                                 {
+                                    // Disable face recognition when leaving login
+                                    if (_faceRecognition != null && _faceRecognition.LoginModeActive)
+                                    {
+                                        _faceRecognition.DisableLoginMode();
+                                    }
                                     login = false;
                                     checkout = true;
                                 }
                                 else if (checkout == true)
                                 {
                                     checkout = false;
-                                    home = true;
+                                    NavigateToHome();
                                 }
                             }
                             ///
@@ -3237,13 +3553,18 @@ public class TuioDemo : Form, TuioListener
                             {
                                 if (login == true)
                                 {
+                                    // Disable face recognition when leaving login
+                                    if (_faceRecognition != null && _faceRecognition.LoginModeActive)
+                                    {
+                                        _faceRecognition.DisableLoginMode();
+                                    }
                                     login = false;
-                                    home = true;
+                                    NavigateToHome();
                                 }
                                 else if (checkout == true)
                                 {
                                     checkout = false;
-                                    login = true;
+                                    NavigateToLogin();
                                 }
                                 else if (home == true)
                                 {
@@ -3370,7 +3691,7 @@ public class TuioDemo : Form, TuioListener
                         {
                             loginsteps = false;
                             signupsteps = false;
-                            login = true;
+                            NavigateToLogin();
                             Console.WriteLine("Returning to Login Page...");
                         }
                     }
@@ -3411,11 +3732,12 @@ public class TuioDemo : Form, TuioListener
                             {
                                 int cat = selectedMenuCategory;
                                 int oldIdx = scrollIndices[cat];
+                                string[][] currentItems = GetItems();  // Get gender-appropriate items
 
                                 if (tobj.AngleDegrees > 20 && tobj.AngleDegrees < 120) // Rotate Right
-                                    scrollIndices[cat] = (scrollIndices[cat] + 1) % items[cat].Length;
+                                    scrollIndices[cat] = (scrollIndices[cat] + 1) % currentItems[cat].Length;
                                 else if (tobj.AngleDegrees > 240 && tobj.AngleDegrees < 340) // Rotate Left
-                                    scrollIndices[cat] = (scrollIndices[cat] - 1 + items[cat].Length) % items[cat].Length;
+                                    scrollIndices[cat] = (scrollIndices[cat] - 1 + currentItems[cat].Length) % currentItems[cat].Length;
 
                                 if (oldIdx != scrollIndices[cat])
                                 {
@@ -3423,7 +3745,7 @@ public class TuioDemo : Form, TuioListener
 
                                     // --- THIS FIXES THE DISPLAY ---
                                     // We update the 'worn' items IMMEDIATELY as you scroll
-                                    string newItem = items[cat][scrollIndices[cat]];
+                                    string newItem = currentItems[cat][scrollIndices[cat]];
                                     if (cat <= 2) currentTop = newItem; // Shirts, Hoodies, Jackets
                                     else currentBottom = newItem;      // Pants, Shorts
 
