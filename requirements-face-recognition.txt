@@ -1,0 +1,21 @@
+# Face Recognition and Gender Detection Bridge Dependencies
+# Install with: py -3.9 -m pip install -r requirements-face-recognition.txt
+
+# IMPORTANT: This project requires Python 3.9 (as specified in main README.md)
+# Do NOT use Python 3.13 - use py -3.9 instead
+
+# Core dependencies (Python 3.9 compatible)
+face-recognition==1.3.0  # Face detection and recognition (includes dlib)
+opencv-python==4.8.1.78  # Camera capture and image processing
+numpy==1.24.3            # Array operations
+Pillow==10.1.0           # Image loading
+
+# Gender classification
+deepface==0.0.79         # Face analysis including gender detection
+
+# Note: dlib is automatically installed as a dependency of face-recognition
+# On Windows, you may need Visual C++ 14.0+ build tools
+# Alternative: pip install dlib-binary (pre-built wheels)
+
+# Installation command for this project:
+# py -3.9 -m pip install -r requirements-face-recognition.txt

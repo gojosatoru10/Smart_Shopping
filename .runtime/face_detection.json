@@ -1,0 +1,9 @@
+{
+  "person_identity": "unknown",
+  "recognition_confidence": 0.0,
+  "gender": "unknown",
+  "gender_confidence": 0.0,
+  "face_detected": false,
+  "login_success": false,
+  "timestamp": "2026-05-11T20:05:01.546575Z"
+}

@@ -50,11 +50,13 @@
   </Target>
   -->
   <ItemGroup>
+    <Compile Include="FaceRecognitionController.cs" />
     <Compile Include="OSC.NET\OSCBundle.cs" />
     <Compile Include="OSC.NET\OSCMessage.cs" />
     <Compile Include="OSC.NET\OSCPacket.cs" />
     <Compile Include="OSC.NET\OSCReceiver.cs" />
     <Compile Include="OSC.NET\OSCTransmitter.cs" />
+    <Compile Include="Adaptiveuicontroller.cs" />
     <Compile Include="TuioDemo.cs">
       <SubType>Form</SubType>
     </Compile>
